@@ -2,23 +2,23 @@
 from PIL import Image
 import numpy as np
 
-bitmap = np.array(Image.open("src\image_converter\\test2.bmp", "r"))
-print(bitmap.shape)
+bitmap = np.array(Image.open("/workspaces/simple_display/src/image_converter/image.bmp", "r"))
+#print(bitmap.shape)
 width, height, bytes_per_pixel = bitmap.shape
 assert bytes_per_pixel == 3
 
 title: str = "bean"
 
-prefix: str = f"const {title.upper()}: DisplayImage<{width}, {height}> = DisplayImage("
+prefix: str = "DisplayImage("
 
 row: str = "["
 for line in bitmap:
     row += "["
     for r, g, b in line:
-        row += f"Pixel::from_color(Color{{r: {r}, g: {g}, b: {b}}}), "
+        row += f"pf(({r}, {g},{b})), "
     row += "], "
 row = row[:-2]
-row += "]);"
+row += "])"
 
 print(prefix + row)
 
