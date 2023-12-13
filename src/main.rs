@@ -203,7 +203,6 @@ pub fn main() {
     type RawTestRow = [u32; TEST_WIDTH];
     type RawTestImage = [u8; TEST_WIDTH*TEST_HEIGHT*3];
 
-    
     macro_rules! include_image {
         ($path:literal) => {
             {
@@ -214,6 +213,10 @@ pub fn main() {
                     Pixel::from_color(Color{r: input.0, g: input.1, b: input.2})
                 }
                 include!($path)
+                // TODO: move to built-in parsing (with a proc macro?) to not rely on python script
+                // probably use std::IO (since proc macro can use host features) to build the struct
+                // would still be an unhygenic expansion and increase compile time, but this is likely
+                // the most reasonable way to get it done (the only downside is at compile time afaict)
             }
         }
     }
