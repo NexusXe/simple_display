@@ -1,11 +1,12 @@
-#![feature(const_mut_refs)]
+#![feature(const_mut_refs)] // for Color and Pixel impls
 //#![feature(const_trait_impl)]
 //#![feature(associated_type_bounds)]
-#![feature(stmt_expr_attributes)]
+#![feature(stmt_expr_attributes)] // for include lints
+#![feature(generic_arg_infer)] // for proc-macro-ish bmp parsing
 
 use core::fmt;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Color {
     r: u8,
     g: u8,
@@ -84,6 +85,7 @@ impl Color {
 }
 
 #[derive(Clone, Copy)]
+#[derive(Debug)]
 pub struct Pixel(Color);
 
 impl Pixel {
@@ -167,17 +169,47 @@ mod tests {
     }
 }
 
-pub struct DisplayImage<const W: usize, const H: usize>([[Pixel; W]; H]);
+pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
 impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for row in self.0 {
-            for pixel in row {
+            for pixel in row.0 {
                 write!(f, "{}", pixel)?
             }
             writeln!(f, "")?
         }
         Ok(())
     }
+}
+
+const IMAGE_WIDTH: usize = 10;
+const IMAGE_HEIGHT: usize = 10;
+
+pub const fn parse_bmp<const S: usize,>(bmp: &'static [u8; S]) -> DisplayImage<IMAGE_WIDTH, IMAGE_HEIGHT> {
+    let _ = assert!(bmp.len() >= 54, "invalid bitmap loaded");
+    let mut i: usize = 9;
+    let mut byte: u8 = 0;
+    //let offset: usize = u32::from_le_bytes([bmp[i], bmp[i+1], bmp[i+2], bmp[i+3]]) as usize;
+    let offset: usize = u32::from_le_bytes([bmp[i+3], bmp[i+2], bmp[i+1], bmp[i]]) as usize;
+    i += offset;
+
+    let mut output: [DisplayRow<IMAGE_WIDTH>; IMAGE_HEIGHT] = [DisplayRow::<IMAGE_WIDTH>::new(); IMAGE_HEIGHT];
+    let mut place_count: usize = 0;
+    let mut row_count: usize = 0;
+
+    while i < bmp.len() {
+        //byte = bmp[i];
+        if place_count == IMAGE_WIDTH {
+            place_count = 0;
+            row_count += 1;
+        }
+
+        output[row_count].0[place_count] = Pixel::from_color(Color{r: bmp[i], g: bmp[i + 1], b: bmp[i + 2]});
+        place_count += 1;
+        i += 3;
+    }
+    
+    DisplayImage(output)
 }
 
 pub fn main() {
@@ -224,11 +256,18 @@ pub fn main() {
     }
 
     //const BEAN: DisplayImage<TEST_WIDTH, TEST_HEIGHT> = include!("/workspaces/simple_display/src/out.txt");
-    const BEAN: DisplayImage<TEST_WIDTH, TEST_HEIGHT> = include_image!("/workspaces/simple_display/src/out.txt");
-
-    println!("{}", &BEAN);
-    println!("{}", core::mem::size_of_val(&BEAN));
-    println!("{}", core::mem::size_of::<DisplayImage<TEST_WIDTH, TEST_HEIGHT>>());
+    //const BEAN: DisplayImage<TEST_WIDTH, TEST_HEIGHT> = include_image!("/workspaces/simple_display/src/out.txt");
+    const ATTEMPT: DisplayImage<IMAGE_WIDTH, IMAGE_HEIGHT> = parse_bmp(include_bytes!("/workspaces/simple_display/src/image_converter/image.bmp"));
+    dbg!(include_bytes!("/workspaces/simple_display/src/image_converter/image.bmp"));
+    
+    //println!("{}", &BEAN);
+    for row in ATTEMPT.0 {
+        for pixel in row.0 {
+            println!("{:?}", pixel)
+        }
+    }
+    //println!("{}", core::mem::size_of_val(&BEAN));
+    //println!("{}", core::mem::size_of::<DisplayImage<TEST_WIDTH, TEST_HEIGHT>>());
     
     // let mut i: usize = 0;
     // let mut x: usize = 0;
