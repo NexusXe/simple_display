@@ -218,6 +218,7 @@ pub fn main() {
                 // probably use std::IO (since proc macro can use host features) to build the struct
                 // would still be an unhygenic expansion and increase compile time, but this is likely
                 // the most reasonable way to get it done (the only downside is at compile time afaict)
+                // could also just use include_bytes!()? will need to see how this can be done at compile time
             }
         }
     }
