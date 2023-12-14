@@ -1,6 +1,7 @@
 #![feature(const_mut_refs)]
-#![feature(const_trait_impl)]
-#![feature(associated_type_bounds)]
+//#![feature(const_trait_impl)]
+//#![feature(associated_type_bounds)]
+#![feature(stmt_expr_attributes)]
 
 use core::fmt;
 
@@ -153,10 +154,10 @@ mod tests {
     use super::*;
     const TEST_HEX: u32 = 0x1eb3ab;
     const TEST_COLOR: Color = Color::from_hex(TEST_HEX);
-    const TEST_PIXEL: Pixel = Pixel::from_hex(TEST_HEX);
+    //const TEST_PIXEL: Pixel = Pixel::from_hex(TEST_HEX);
     const BLACK_HEX: u32 = 0u32;
     const BLACK_COLOR: Color = Color::from_hex(BLACK_HEX);
-    const BLACK_PIXEL: Pixel = Pixel(BLACK_COLOR);
+    //const BLACK_PIXEL: Pixel = Pixel(BLACK_COLOR);
     
     #[test]
     fn color_hex_conv() {
@@ -181,7 +182,6 @@ impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
 
 pub fn main() {
     
-    
     //const _: () = assert!(TEST_HEX == TEST_COLOR.as_hex());
     let mut terminal_pixels: DisplayRow<256> = DisplayRow([Pixel::new(); 256]);
     for i in 0..TERMINAL_COLORS.len() {
@@ -199,12 +199,13 @@ pub fn main() {
     const TEST_WIDTH: usize = 10;
     const TEST_HEIGHT: usize = 10;
 
-    type TestRow = DisplayRow<TEST_WIDTH>;
-    type RawTestRow = [u32; TEST_WIDTH];
-    type RawTestImage = [u8; TEST_WIDTH*TEST_HEIGHT*3];
+    //type TestRow = DisplayRow<TEST_WIDTH>;
+    //type RawTestRow = [u32; TEST_WIDTH];
+    //type RawTestImage = [u8; TEST_WIDTH*TEST_HEIGHT*3];
 
     macro_rules! include_image {
         ($path:literal) => {
+            #[allow(dead_code)]
             {
                 type DI<const W: usize, const H: usize> = DisplayImage<W, H>;
                 type P = Pixel;
