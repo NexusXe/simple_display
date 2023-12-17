@@ -1,6 +1,4 @@
 #![feature(const_mut_refs)] // for Color and Pixel impls
-//#![feature(const_trait_impl)]
-//#![feature(associated_type_bounds)]
 #![feature(stmt_expr_attributes)] // for include lints
 #![feature(generic_arg_infer)] // for proc-macro-ish bmp parsing
 
@@ -152,7 +150,8 @@ impl Into<u32> for Pixel {
 
 impl fmt::Display for Pixel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "\x1b[48;5;{}m  \x1b[49m", self.0.closest_terminal_color())
+        const PIXEL_WIDTH: usize = 2;
+        write!(f, "\x1b[48;5;{}m{}\x1b[49m", self.0.closest_terminal_color(), " ".repeat(PIXEL_WIDTH))
     }
 }
 
@@ -180,6 +179,7 @@ impl<const W: usize> DisplayRow<W> {
 impl<const W: usize> fmt::Display for DisplayRow<W> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for i in &self.0 {
+            // TODO: uhh... why twice?
             write!(f, "{}", i)?;
             write!(f, "{}", i)?;
         }
@@ -224,7 +224,7 @@ macro_rules! parse_bmp {
             const fn ph(input: u32) -> Pixel { // essentially a type alias
                 Pixel::from_hex(input)
             }
-            get_bmp!($path)
+            Box::new(get_bmp!($path))
             // TODO: move to built-in parsing (with a proc macro?) to not rely on python script
             // probably use std::IO (since proc macro can use host features) to build the struct
             // would still be an unhygenic expansion and increase compile time, but this is likely
@@ -232,11 +232,6 @@ macro_rules! parse_bmp {
             // could also just use include_bytes!()? will need to see how this can be done at compile time
         }
     }
-}
-
-pub fn main() {
-    let q = parse_bmp!("C:/Users/andas/Documents/Rust_projects/simple_display/src/image_converter/image.bmp");
-    println!("{}", q);
 }
 
 #[cfg(test)]
@@ -301,3 +296,9 @@ const TERMINAL_COLORS: [u32; 256] = [
     0x767676, 0x808080, 0x8a8a8a, 0x949494, 0x9e9e9e, 0xa8a8a8, 0xb2b2b2, 0xbcbcbc, 0xc6c6c6,
     0xd0d0d0, 0xdadada, 0xe4e4e4, 0xeeeeee,
 ];
+
+
+pub fn main() {
+    let q = parse_bmp!("src/image.bmp");
+    println!("{}", q);
+}
