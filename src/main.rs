@@ -5,8 +5,9 @@
 #![feature(generic_arg_infer)] // for proc-macro-ish bmp parsing
 
 use core::fmt;
+use include_bmp::get_bmp;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Color {
     r: u8,
     g: u8,
@@ -84,8 +85,19 @@ impl Color {
     }
 }
 
-#[derive(Clone, Copy)]
-#[derive(Debug)]
+impl core::fmt::UpperHex for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:08X}", self.as_hex())
+    }
+}
+
+impl core::fmt::Debug for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Pixel {{ {:08X} }}", self)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Pixel(Color);
 
 impl Pixel {
@@ -126,13 +138,37 @@ impl From<[u8; 3]> for Pixel {
     }
 }
 
+impl From<u32> for Pixel {
+    fn from(value: u32) -> Self {
+        Self::from_hex(value)
+    }
+}
+
+impl Into<u32> for Pixel {
+    fn into(self) -> u32 {
+        self.value_hex()
+    }
+}
+
 impl fmt::Display for Pixel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "\x1b[48;5;{}m  \x1b[49m", self.0.closest_terminal_color())
     }
 }
 
-#[derive(Clone, Copy)]
+impl core::fmt::UpperHex for Pixel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:08X}", self.value_hex())
+    }
+}
+
+impl core::fmt::Debug for Pixel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Pixel {{ {:08X} }}", self)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct DisplayRow<const W: usize>([Pixel; W]);
 
 impl<const W: usize> DisplayRow<W> {
@@ -151,6 +187,58 @@ impl<const W: usize> fmt::Display for DisplayRow<W> {
     }
 }
 
+impl <const W: usize> core::fmt::Debug for DisplayRow<W> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for x in self.0 {
+            write!(f, "{:08X}", x)?
+        }
+        Ok(())
+    }
+
+}
+
+pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
+impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for row in self.0 {
+            for pixel in row.0 {
+                write!(f, "{}", pixel)?
+            }
+            writeln!(f, "")?
+        }
+        Ok(())
+    }
+}
+
+macro_rules! parse_bmp {
+    ($path:literal) => {
+        #[allow(dead_code)]
+        {
+            type DI<const W: usize, const H: usize> = DisplayImage<W, H>;
+            type P = Pixel;
+            type C = Color;
+            type DR<const W: usize> = DisplayRow<W>;
+            const fn dr<const W: usize>(input: [Pixel; W]) -> DisplayRow<W> {
+                DisplayRow(input)
+            }
+            const fn ph(input: u32) -> Pixel { // essentially a type alias
+                Pixel::from_hex(input)
+            }
+            get_bmp!($path)
+            // TODO: move to built-in parsing (with a proc macro?) to not rely on python script
+            // probably use std::IO (since proc macro can use host features) to build the struct
+            // would still be an unhygenic expansion and increase compile time, but this is likely
+            // the most reasonable way to get it done (the only downside is at compile time afaict)
+            // could also just use include_bytes!()? will need to see how this can be done at compile time
+        }
+    }
+}
+
+pub fn main() {
+    let q = parse_bmp!("C:/Users/andas/Documents/Rust_projects/simple_display/src/image_converter/image.bmp");
+    println!("{}", q);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,136 +255,19 @@ mod tests {
         assert_eq!(BLACK_COLOR.as_hex(), BLACK_HEX);
         assert_eq!((TEST_COLOR.r, TEST_COLOR.g, TEST_COLOR.b), (30, 179, 171));
     }
-}
 
-pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
-impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for row in self.0 {
-            for pixel in row.0 {
-                write!(f, "{}", pixel)?
-            }
-            writeln!(f, "")?
+    #[test]
+    fn color_clamping() {
+        let mut terminal_pixels: DisplayRow<256> = DisplayRow([Pixel::new(); 256]);
+        for i in 0..TERMINAL_COLORS.len() {
+            terminal_pixels.0[i] = Pixel::from_hex(TERMINAL_COLORS[i])
         }
-        Ok(())
-    }
-}
-
-const IMAGE_WIDTH: usize = 10;
-const IMAGE_HEIGHT: usize = 10;
-
-pub const fn parse_bmp<const S: usize,>(bmp: &'static [u8; S]) -> DisplayImage<IMAGE_WIDTH, IMAGE_HEIGHT> {
-    let _ = assert!(bmp.len() >= 54, "invalid bitmap loaded");
-    let mut i: usize = 9;
-    let mut byte: u8 = 0;
-    //let offset: usize = u32::from_le_bytes([bmp[i], bmp[i+1], bmp[i+2], bmp[i+3]]) as usize;
-    let offset: usize = u32::from_le_bytes([bmp[i+3], bmp[i+2], bmp[i+1], bmp[i]]) as usize;
-    i += offset;
-
-    let mut output: [DisplayRow<IMAGE_WIDTH>; IMAGE_HEIGHT] = [DisplayRow::<IMAGE_WIDTH>::new(); IMAGE_HEIGHT];
-    let mut place_count: usize = 0;
-    let mut row_count: usize = 0;
-
-    while i < bmp.len() {
-        //byte = bmp[i];
-        if place_count == IMAGE_WIDTH {
-            place_count = 0;
-            row_count += 1;
+        let mut terminal_pixels_clamped: DisplayRow<256> = terminal_pixels;
+        for i in 0..terminal_pixels_clamped.0.len() {
+            terminal_pixels_clamped.0[i].0.clamp();
         }
-
-        output[row_count].0[place_count] = Pixel::from_color(Color{r: bmp[i], g: bmp[i + 1], b: bmp[i + 2]});
-        place_count += 1;
-        i += 3;
+        assert_eq!(terminal_pixels, terminal_pixels_clamped);
     }
-    
-    DisplayImage(output)
-}
-
-pub fn main() {
-    
-    //const _: () = assert!(TEST_HEX == TEST_COLOR.as_hex());
-    let mut terminal_pixels: DisplayRow<256> = DisplayRow([Pixel::new(); 256]);
-    for i in 0..TERMINAL_COLORS.len() {
-        terminal_pixels.0[i] = Pixel::from_hex(TERMINAL_COLORS[i])
-    }
-    let mut terminal_pixels_clamped: DisplayRow<256> = terminal_pixels;
-    for i in 0..terminal_pixels_clamped.0.len() {
-        terminal_pixels_clamped.0[i].0.clamp();
-    }
-
-    println!("{}", &terminal_pixels);
-    println!("{}", &terminal_pixels_clamped);
-    //dbg!(core::mem::size_of::<DisplayRow<256>>());
-
-    const TEST_WIDTH: usize = 10;
-    const TEST_HEIGHT: usize = 10;
-
-    //type TestRow = DisplayRow<TEST_WIDTH>;
-    //type RawTestRow = [u32; TEST_WIDTH];
-    //type RawTestImage = [u8; TEST_WIDTH*TEST_HEIGHT*3];
-
-    macro_rules! include_image {
-        ($path:literal) => {
-            #[allow(dead_code)]
-            {
-                type DI<const W: usize, const H: usize> = DisplayImage<W, H>;
-                type P = Pixel;
-                type C = Color;
-                const fn pf(input: (u8, u8, u8)) -> Pixel { // essentially a type alias
-                    Pixel::from_color(Color{r: input.0, g: input.1, b: input.2})
-                }
-                include!($path)
-                // TODO: move to built-in parsing (with a proc macro?) to not rely on python script
-                // probably use std::IO (since proc macro can use host features) to build the struct
-                // would still be an unhygenic expansion and increase compile time, but this is likely
-                // the most reasonable way to get it done (the only downside is at compile time afaict)
-                // could also just use include_bytes!()? will need to see how this can be done at compile time
-            }
-        }
-    }
-
-    //const BEAN: DisplayImage<TEST_WIDTH, TEST_HEIGHT> = include!("/workspaces/simple_display/src/out.txt");
-    //const BEAN: DisplayImage<TEST_WIDTH, TEST_HEIGHT> = include_image!("/workspaces/simple_display/src/out.txt");
-    const ATTEMPT: DisplayImage<IMAGE_WIDTH, IMAGE_HEIGHT> = parse_bmp(include_bytes!("/workspaces/simple_display/src/image_converter/image.bmp"));
-    dbg!(include_bytes!("/workspaces/simple_display/src/image_converter/image.bmp"));
-    
-    //println!("{}", &BEAN);
-    for row in ATTEMPT.0 {
-        for pixel in row.0 {
-            println!("{:?}", pixel)
-        }
-    }
-    //println!("{}", core::mem::size_of_val(&BEAN));
-    //println!("{}", core::mem::size_of::<DisplayImage<TEST_WIDTH, TEST_HEIGHT>>());
-    
-    // let mut i: usize = 0;
-    // let mut x: usize = 0;
-
-    // while i < TEST.len() {
-    //     image[x] = Pixel(Color{r: TEST[i], g: TEST[i + 1], b: TEST[i + 2]});
-    //     i += 3;
-    //     x += 1;
-    // }
-
-    // let mut squareimage = [DisplayRow([Pixel::from_hex(0u32); TEST_WIDTH]); TEST_HEIGHT];
-
-    // let mut i: usize = 0;
-    // let mut x: usize = 0;
-
-    // while i < image.len() {
-    //     let mut row: DisplayRow<8> = DisplayRow::new();
-    //     for y in 0..TEST_WIDTH {
-    //         row.0[y] = image[i + y]
-    //     }
-    //     squareimage[x] = row;
-    //     i += TEST_WIDTH;
-    //     x += 1;
-    // }
-
-    // for i in squareimage {
-    //     println!("{}", i);
-    // }
-
 }
 
 const TERMINAL_COLORS: [u32; 256] = [
