@@ -128,6 +128,10 @@ impl Pixel {
     pub const fn from_color(color: Color) -> Self {
         Self(color)
     }
+
+    pub const fn set(mut self, new: Pixel) {
+        self = new;
+    }
 }
 
 impl From<[u8; 3]> for Pixel {
@@ -223,6 +227,32 @@ impl<const W: usize> core::fmt::Debug for DisplayRow<W> {
 }
 
 pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
+
+impl<const W: usize, const H: usize> DisplayImage<W, H> {
+    pub const fn get_pixel(&mut self, pos: PixelPos) -> &mut Pixel {
+        let (x, y) = pos;
+        let x = x as usize;
+        let y = y as usize;
+        
+        //debug_assert!(x < W, "attempted out-of-array access! tried to get x idx {:} of array of len {:}", x, W);
+        //debug_assert!(y < H, "attempted out-of-array access! tried to get y idx {:} of array of len {:}", y, H);
+        #[cfg(not(debug_assertions))]
+        {
+            if (x >= W as u32) || (y >= H as u32) {
+                unreachable!()
+            }
+        }
+        
+        &mut self.0[y].0[x]
+        //todo!()
+    }
+
+    pub const fn set_pixel(&mut self, pos: PixelPos, new: Pixel) {
+        let x = self.get_pixel(pos);
+        x.set(new);
+    }
+}
+
 impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for row in self.0 {
@@ -264,6 +294,44 @@ macro_rules! parse_bmp {
         }
     }
 }
+
+type DisplayAxisUnit = u32;
+type PixelPos = (DisplayAxisUnit, DisplayAxisUnit);
+
+struct Change {
+    new: Pixel,
+}
+
+struct Shift {
+    color_diff: Color,
+    direction: bool,
+}
+
+enum SDiff {
+    Change(Change),
+    Shift(Shift),
+}
+
+enum ADiff {
+    Change(Change),
+    Shift(Shift),
+}
+
+struct SpotDiff {
+    kind: SDiff,
+    pos: PixelPos,
+}
+
+struct AllDiff {
+    kind: ADiff,
+}
+
+enum DisplayDiff {
+    Spot(SpotDiff),
+    All(AllDiff),
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -329,6 +397,11 @@ const TERMINAL_COLORS: [u32; 256] = [
 ];
 
 pub fn main() {
-    let q = parse_bmp!("src/lemon.bmp");
+    let mut q = parse_bmp!("src/image.bmp");
+    let mut x = q.get_pixel((1, 1));
+    x.clear();
     println!("{}", q);
+    q.set_pixel((0, 0), Pixel::new());
+    println!("{}", q); // DOES NOT WORK
+    //println!("{}", &x);
 }
