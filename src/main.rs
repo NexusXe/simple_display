@@ -132,7 +132,11 @@ impl Pixel {
 
 impl From<[u8; 3]> for Pixel {
     fn from(value: [u8; 3]) -> Self {
-        Self(Color{r: value[0], g: value[1], b: value[2]})
+        Self(Color {
+            r: value[0],
+            g: value[1],
+            b: value[2],
+        })
     }
 }
 
@@ -148,10 +152,32 @@ impl Into<u32> for Pixel {
     }
 }
 
+const PIXEL_WIDTH: usize = 3;
+
+#[cfg(not(feature = "24bpp"))]
 impl fmt::Display for Pixel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        const PIXEL_WIDTH: usize = 2;
-        write!(f, "\x1b[48;5;{}m{}\x1b[49m", self.0.closest_terminal_color(), " ".repeat(PIXEL_WIDTH))
+        write!(
+            f,
+            "\x1b[48;5;{}m{}\x1b[49m",
+            self.0.closest_terminal_color(),
+            " ".repeat(PIXEL_WIDTH)
+        )
+    }
+}
+
+#[cfg(feature = "24bpp")]
+impl fmt::Display for Pixel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (r, g, b) = (self.0.r, self.0.g, self.0.b);
+        write!(
+            f,
+            "\x1b[48;2;{:};{:};{:}m{}\x1b[49m",
+            r,
+            g,
+            b,
+            " ".repeat(PIXEL_WIDTH)
+        )
     }
 }
 
@@ -187,14 +213,13 @@ impl<const W: usize> fmt::Display for DisplayRow<W> {
     }
 }
 
-impl <const W: usize> core::fmt::Debug for DisplayRow<W> {
+impl<const W: usize> core::fmt::Debug for DisplayRow<W> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for x in self.0 {
             write!(f, "{:08X}", x)?
         }
         Ok(())
     }
-
 }
 
 pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
@@ -221,9 +246,15 @@ macro_rules! parse_bmp {
             const fn dr<const W: usize>(input: [Pixel; W]) -> DisplayRow<W> {
                 DisplayRow(input)
             }
+
             const fn ph(input: u32) -> Pixel { // essentially a type alias
                 Pixel::from_hex(input)
             }
+
+            const fn di<const W: usize, const H: usize>(input: [DisplayRow<W>; H]) -> DisplayImage<W, H> {
+                DisplayImage(input)
+            }
+
             Box::new(get_bmp!($path))
             // TODO: move to built-in parsing (with a proc macro?) to not rely on python script
             // probably use std::IO (since proc macro can use host features) to build the struct
@@ -243,7 +274,7 @@ mod tests {
     const BLACK_HEX: u32 = 0u32;
     const BLACK_COLOR: Color = Color::from_hex(BLACK_HEX);
     //const BLACK_PIXEL: Pixel = Pixel(BLACK_COLOR);
-    
+
     #[test]
     fn color_hex_conv() {
         assert_eq!(TEST_COLOR.as_hex(), TEST_HEX);
@@ -297,8 +328,7 @@ const TERMINAL_COLORS: [u32; 256] = [
     0xd0d0d0, 0xdadada, 0xe4e4e4, 0xeeeeee,
 ];
 
-
 pub fn main() {
-    let q = parse_bmp!("src/image.bmp");
+    let q = parse_bmp!("src/lemon.bmp");
     println!("{}", q);
 }
