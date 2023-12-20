@@ -267,7 +267,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         //debug_assert!(y < H, "attempted out-of-array access! tried to get y idx {:} of array of len {:}", y, H);
         #[cfg(not(debug_assertions))]
         {
-            if (x >= W as u32) || (y >= H as u32) {
+            if (x >= W) || (y >= H) {
                 unreachable!()
             }
         }
@@ -282,12 +282,16 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
     }
 
     pub const fn parse_diff(&mut self, diff: DisplayDiff) {
+        #[cfg(not(debug_assertions))]
+        {
+            panic!("parse_diff is not yet fully implemented, as it does not correctly recurse over rows!");
+        }
+
         match diff {
             DisplayDiff::Spot(spot) => self.get_pixel(spot.pos).diff(spot.kind),
             DisplayDiff::All(all) => {
                 let mut a: usize = 0;
                 let mut b: usize = 0;
-                let mut c: usize = 0;
 
                 while a < self.0.len() {
                     let row = &mut self.0[a];
@@ -297,6 +301,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
                         b += 1;
                     }
                     a += 1;
+                    // TODO: this function is not yet implemented, as it does not correctly recurse over rows!
                 }
             }
         }
@@ -566,23 +571,6 @@ const TERMINAL_COLORS: [u32; 256] = [
 
 pub fn main() {
     let mut q = parse_bmp!("src/image.bmp");
-    let x = q.get_pixel((1, 1));
-    x.clear();
+    q.parse_diff(diff!(Change{new: Color::from_hex(0xAAu32)}));
     println!("{}", q);
-    q.set_color((2, 2), Pixel::new().value_color());
-    println!("{}", q);
-
-    dbg!(mem::size_of::<DisplayDiff>());
-    enum G {
-        A,
-        B,
-    }
-    let testdiff: DisplayDiff = DisplayDiff::Spot(SpotDiff{kind: SDiff::Change(Change{new: Color::new()}), pos: (0, 0)});
-    let testdiff2: DisplayDiff = diff!(Change{new: Color::new()}, (1, 0));
-    dbg!(&testdiff);
-    dbg!(&testdiff2);
-    q.parse_diff(testdiff);
-    q.parse_diff(testdiff2);
-    println!("{}", q);
-    
 }
