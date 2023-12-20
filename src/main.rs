@@ -3,6 +3,7 @@
 #![feature(generic_arg_infer)] // for proc-macro-ish bmp parsing
 #![allow(dead_code, unused)]
 #![feature(const_option)] // for const pixel diffs
+#![feature(const_trait_impl)] // for const ToDisplayDiff impls
 
 use core::fmt;
 use include_bmp::get_bmp;
@@ -347,23 +348,49 @@ macro_rules! parse_bmp {
 type DisplayAxisUnit = u32;
 type PixelPos = (DisplayAxisUnit, DisplayAxisUnit);
 
-#[derive(Clone, Copy)]
+trait ToDisplayDiff {
+    fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff;
+    fn to_fqadiff(&self) -> DisplayDiff;
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Change {
     new: Color,
 }
 
-#[derive(Clone, Copy)]
+impl const ToDisplayDiff for Change {
+    fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff {
+        DisplayDiff::Spot(SpotDiff{kind: SDiff::Change(*self), pos})
+    }
+
+    fn to_fqadiff(&self) -> DisplayDiff {
+        DisplayDiff::All(AllDiff{kind: ADiff::Change(*self)})
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Shift {
     color_diff: Color,
     direction: bool,
 }
 
-#[derive(Clone, Copy)]
+impl const ToDisplayDiff for Shift {
+    fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff {
+        DisplayDiff::Spot(SpotDiff{kind: SDiff::Shift(*self), pos})
+    }
+
+    fn to_fqadiff(&self) -> DisplayDiff {
+        DisplayDiff::All(AllDiff{kind: ADiff::Shift(*self)})
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum SDiff {
     Change(Change),
     Shift(Shift),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum ADiff {
     Change(Change),
     Shift(Shift),
@@ -378,15 +405,18 @@ impl ADiff {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct SpotDiff {
     kind: SDiff,
     pos: PixelPos,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct AllDiff {
     kind: ADiff,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DisplayDiff {
     Spot(SpotDiff),
     All(AllDiff),
@@ -447,6 +477,16 @@ impl fmt::Debug for DisplayDiff {
     }
 }
 
+
+macro_rules! diff { 
+    ($kind:expr) => {
+        $kind.to_fqadiff()
+    };
+    ($kind:expr, $pos:expr) => {
+        $kind.to_fqsdiff($pos)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -475,6 +515,20 @@ mod tests {
             terminal_pixels_clamped.0[i].0.clamp();
         }
         assert_eq!(terminal_pixels, terminal_pixels_clamped);
+    }
+
+    #[test]
+    fn diff_macro() {
+        let sdiff1: DisplayDiff = DisplayDiff::Spot(SpotDiff{kind: SDiff::Change(Change{new: Color::new()}), pos: (0, 0)});
+        let sdiff2: DisplayDiff = diff!(Change{new: Color::new()}, (0, 0));
+        let sdiff3: DisplayDiff = diff!(Change{new: Color::new()}, (0, 1));
+        let adiff1: DisplayDiff = DisplayDiff::All(AllDiff{kind: ADiff::Change(Change{new: Color::new()})});
+        let adiff2: DisplayDiff = diff!(Change{new: Color::new()});
+        let adiff3: DisplayDiff = diff!(Change{new: Color::from_hex(0xFFu32)});
+        assert_eq!(sdiff1, sdiff2);
+        assert_ne!(sdiff1, sdiff3);
+        assert_eq!(adiff1, adiff2);
+        assert_ne!(adiff1, adiff3);
     }
 }
 
@@ -519,11 +573,16 @@ pub fn main() {
     println!("{}", q);
 
     dbg!(mem::size_of::<DisplayDiff>());
-    enum g {
-        a,
-        b,
+    enum G {
+        A,
+        B,
     }
     let testdiff: DisplayDiff = DisplayDiff::Spot(SpotDiff{kind: SDiff::Change(Change{new: Color::new()}), pos: (0, 0)});
+    let testdiff2: DisplayDiff = diff!(Change{new: Color::new()}, (1, 0));
+    dbg!(&testdiff);
+    dbg!(&testdiff2);
     q.parse_diff(testdiff);
-    println!("{}", q)
+    q.parse_diff(testdiff2);
+    println!("{}", q);
+    
 }
