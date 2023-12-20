@@ -282,10 +282,6 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
     }
 
     pub const fn parse_diff(&mut self, diff: DisplayDiff) {
-        #[cfg(not(debug_assertions))]
-        {
-            panic!("parse_diff is not yet fully implemented, as it does not correctly recurse over rows!");
-        }
 
         match diff {
             DisplayDiff::Spot(spot) => self.get_pixel(spot.pos).diff(spot.kind),
@@ -300,8 +296,8 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
                         pixel.diff(all.kind.to_sdiff());
                         b += 1;
                     }
+                    b = 0;
                     a += 1;
-                    // TODO: this function is not yet implemented, as it does not correctly recurse over rows!
                 }
             }
         }
