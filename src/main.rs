@@ -1,9 +1,12 @@
 #![feature(const_mut_refs)] // for Color and Pixel impls
 #![feature(stmt_expr_attributes)] // for include lints
 #![feature(generic_arg_infer)] // for proc-macro-ish bmp parsing
+#![allow(dead_code, unused)]
+#![feature(const_option)] // for const pixel diffs
 
 use core::fmt;
 use include_bmp::get_bmp;
+use std::mem;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Color {
@@ -13,6 +16,10 @@ pub struct Color {
 }
 
 impl Color {
+    pub const fn new() -> Self {
+        Self { r: 0u8, g: 0u8, b: 0u8 }
+    }
+
     pub const fn from_hex(hex: u32) -> Self {
         Self {
             r: (hex >> 16) as u8,
@@ -105,7 +112,7 @@ impl Pixel {
         Self(Color::from_hex(Self::BLANK_PIXEL_HEX))
     }
 
-    pub const fn set_color(&mut self, new_color: u32) {
+    pub const fn set_hex(&mut self, new_color: u32) {
         *self = Color::from_hex(new_color).into_pixel();
     }
 
@@ -129,8 +136,29 @@ impl Pixel {
         Self(color)
     }
 
-    pub const fn set(mut self, new: Pixel) {
-        self = new;
+    pub const fn set_color(&mut self, new: Color) {
+        self.0 = new;
+    }
+
+    const fn diff(&mut self, diff: SDiff) {
+        match diff {
+            SDiff::Change(x) => self.set_color(x.new),
+            SDiff::Shift(x) => {
+                let cshft = x.color_diff;
+                match x.direction {
+                    true => {
+                        self.0.r = u8::saturating_add(self.0.r, cshft.r);
+                        self.0.g = u8::saturating_add(self.0.g, cshft.g);
+                        self.0.b = u8::saturating_sub(self.0.b, cshft.b);
+                    }
+                    false => {
+                        self.0.r = u8::saturating_sub(self.0.r, cshft.r);
+                        self.0.g = u8::saturating_sub(self.0.g, cshft.g);
+                        self.0.b = u8::saturating_sub(self.0.b, cshft.b);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -233,7 +261,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         let (x, y) = pos;
         let x = x as usize;
         let y = y as usize;
-        
+
         //debug_assert!(x < W, "attempted out-of-array access! tried to get x idx {:} of array of len {:}", x, W);
         //debug_assert!(y < H, "attempted out-of-array access! tried to get y idx {:} of array of len {:}", y, H);
         #[cfg(not(debug_assertions))]
@@ -242,14 +270,35 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
                 unreachable!()
             }
         }
-        
+
         &mut self.0[y].0[x]
         //todo!()
     }
 
-    pub const fn set_pixel(&mut self, pos: PixelPos, new: Pixel) {
-        let x = self.get_pixel(pos);
-        x.set(new);
+    pub const fn set_color(&mut self, pos: PixelPos, new: Color) {
+        let x: &mut Pixel = self.get_pixel(pos);
+        x.set_color(new);
+    }
+
+    pub const fn parse_diff(&mut self, diff: DisplayDiff) {
+        match diff {
+            DisplayDiff::Spot(spot) => self.get_pixel(spot.pos).diff(spot.kind),
+            DisplayDiff::All(all) => {
+                let mut a: usize = 0;
+                let mut b: usize = 0;
+                let mut c: usize = 0;
+
+                while a < self.0.len() {
+                    let row = &mut self.0[a];
+                    while b < row.0.len() {
+                        let pixel = &mut row.0[b];
+                        pixel.diff(all.kind.to_sdiff());
+                        b += 1;
+                    }
+                    a += 1;
+                }
+            }
+        }
     }
 }
 
@@ -298,15 +347,18 @@ macro_rules! parse_bmp {
 type DisplayAxisUnit = u32;
 type PixelPos = (DisplayAxisUnit, DisplayAxisUnit);
 
+#[derive(Clone, Copy)]
 struct Change {
-    new: Pixel,
+    new: Color,
 }
 
+#[derive(Clone, Copy)]
 struct Shift {
     color_diff: Color,
     direction: bool,
 }
 
+#[derive(Clone, Copy)]
 enum SDiff {
     Change(Change),
     Shift(Shift),
@@ -317,21 +369,83 @@ enum ADiff {
     Shift(Shift),
 }
 
-struct SpotDiff {
+impl ADiff {
+    pub const fn to_sdiff(&self) -> SDiff {
+        match self {
+            Self::Change(x) => SDiff::Change(*x),
+            Self::Shift(x) => SDiff::Shift(*x),
+        }
+    }
+}
+
+pub struct SpotDiff {
     kind: SDiff,
     pos: PixelPos,
 }
 
-struct AllDiff {
+pub struct AllDiff {
     kind: ADiff,
 }
 
-enum DisplayDiff {
+pub enum DisplayDiff {
     Spot(SpotDiff),
     All(AllDiff),
 }
 
+impl DisplayDiff {
+    pub const fn to_spot(&self, pos: PixelPos) -> Self {
+        match self {
+            Self::Spot(SpotDiff { kind: x, pos: _ }) => Self::Spot(SpotDiff { kind: *x, pos }),
+            Self::All((AllDiff { kind: x })) => Self::Spot(SpotDiff {
+                kind: x.to_sdiff(),
+                pos,
+            }),
+        }
+    }
+    pub const fn target(&self) -> Option<&PixelPos> {
+        match self {
+            Self::Spot(SpotDiff { kind: _, pos }) => Some(pos),
+            Self::All(_) => None,
+        }
+    }
+}
 
+impl fmt::Debug for DisplayDiff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::All(x) => {
+                write!(f, "entire-display ")?;
+                match x.kind {
+                    ADiff::Change(c) => writeln!(f, "change to {:X}", c.new)?,
+                    ADiff::Shift(s) => {
+                        let dir: &str = match s.direction {
+                            true => "+",
+                            false => "-",
+                        };
+
+                        writeln!(f, "shift by {}{:X}", dir, s.color_diff)?
+                    }
+                }
+            }
+
+            Self::Spot(x) => {
+                write!(f, "pixel ({:}, {:}) ", x.pos.0, x.pos.1)?;
+                match x.kind {
+                    SDiff::Change(c) => writeln!(f, "change to {:X}", c.new)?,
+                    SDiff::Shift(s) => {
+                        let dir: &str = match s.direction {
+                            true => "+",
+                            false => "-",
+                        };
+
+                        writeln!(f, "shift by {}{:X}", dir, s.color_diff)?
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -398,10 +512,18 @@ const TERMINAL_COLORS: [u32; 256] = [
 
 pub fn main() {
     let mut q = parse_bmp!("src/image.bmp");
-    let mut x = q.get_pixel((1, 1));
+    let x = q.get_pixel((1, 1));
     x.clear();
     println!("{}", q);
-    q.set_pixel((0, 0), Pixel::new());
-    println!("{}", q); // DOES NOT WORK
-    //println!("{}", &x);
+    q.set_color((2, 2), Pixel::new().value_color());
+    println!("{}", q);
+
+    dbg!(mem::size_of::<DisplayDiff>());
+    enum g {
+        a,
+        b,
+    }
+    let testdiff: DisplayDiff = DisplayDiff::Spot(SpotDiff{kind: SDiff::Change(Change{new: Color::new()}), pos: (0, 0)});
+    q.parse_diff(testdiff);
+    println!("{}", q)
 }
