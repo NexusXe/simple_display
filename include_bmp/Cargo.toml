@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "include_bmp"
 version = "0.1.0"
@@ -17,4 +19,11 @@ quote = "1.0"
 opt-level = 3
 debug = 1
 lto = true
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.release]
+opt-level = 3
+debug = 0
+lto = "fat"
+rustflags = ["-C", "target-cpu=native"]
 

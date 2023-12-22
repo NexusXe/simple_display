@@ -567,6 +567,6 @@ const TERMINAL_COLORS: [u32; 256] = [
 
 pub fn main() {
     let mut q = parse_bmp!("src/image.bmp");
-    q.parse_diff(diff!(Change{new: Color::from_hex(0xAAu32)}));
+    q.parse_diff(diff!(Change{new: Color::from_hex(0xA0A0A0)}, (0, 0)));
     println!("{}", q);
 }
