@@ -4,6 +4,9 @@
 #![allow(dead_code, unused)]
 #![feature(const_option)] // for const pixel diffs
 #![feature(const_trait_impl)] // for const ToDisplayDiff impls
+#![feature(generic_const_exprs)] // for DisplaySection generic impls
+#![allow(incomplete_features)] // for `generic_const_exprs` feature
+#![feature(int_roundings)] // for section splitting math
 
 use core::fmt;
 use include_bmp::get_bmp;
@@ -233,6 +236,14 @@ impl<const W: usize> DisplayRow<W> {
     pub const fn new() -> DisplayRow<W> {
         DisplayRow([Pixel::new(); W])
     }
+
+    const fn pixel(&self, n: usize) -> &Pixel {
+        &self.0[n]
+    }
+
+    const fn pixel_mut(&mut self, n: usize) -> &mut Pixel {
+        &mut self.0[n]
+    }
 }
 
 impl<const W: usize> fmt::Display for DisplayRow<W> {
@@ -255,9 +266,19 @@ impl<const W: usize> core::fmt::Debug for DisplayRow<W> {
     }
 }
 
+
 pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
 
+const DISPLAY_SECTION_WIDTH: usize = 16;
+const DISPLAY_SECTION_HEIGHT: usize = 16;
+
+type DisplaySection = DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT>;
+
 impl<const W: usize, const H: usize> DisplayImage<W, H> {
+    pub const fn new() -> Self {
+        Self([DisplayRow::<W>::new(); H])
+    }
+
     pub const fn get_pixel(&mut self, pos: PixelPos) -> &mut Pixel {
         let (x, y) = pos;
         let x = x as usize;
@@ -301,6 +322,62 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
                 }
             }
         }
+    }
+
+    const fn row(&self, n: usize) -> &DisplayRow<W> {
+        &self.0[n]
+    }
+
+    const fn row_mut(&mut self, n: usize) -> &mut DisplayRow<W> {
+        &mut self.0[n]
+    }
+
+    
+    const DISPLAY_SECTIONS_WIDE: usize = W/DISPLAY_SECTION_WIDTH;
+    const DISPLAY_SECTIONS_TALL: usize = H/DISPLAY_SECTION_HEIGHT;
+    pub const DISPLAY_SECTIONS_WITHIN: usize = Self::DISPLAY_SECTIONS_WIDE*Self::DISPLAY_SECTIONS_TALL;
+
+    pub fn split_to_sections(self) -> [DisplaySection; Self::DISPLAY_SECTIONS_WITHIN] {
+        const ARRAY_REPEAT_VALUE: DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT> = DisplaySection::new(); // need to do this for... const reasons?
+        let mut output = [ARRAY_REPEAT_VALUE; Self::DISPLAY_SECTIONS_WITHIN];
+        // traverse original image section by section
+        //let lr_bound: usize = Self::DISPLAY_SECTIONS_WIDE * DISPLAY_SECTION_WIDTH;
+        //let ud_bound: usize = Self::DISPLAY_SECTIONS_TALL * DISPLAY_SECTION_HEIGHT;
+        //assert!(lr_bound < self.0[0].0.len());
+        //assert!(ud_bound < self.0.len());
+
+        let mut section: usize = 0;
+        //dbg!(Self::DISPLAY_SECTIONS_WITHIN);
+        //dbg!(Self::DISPLAY_SECTIONS_WIDE);
+        
+
+        while section < Self::DISPLAY_SECTIONS_WITHIN {
+            let row_ident = section - section.div_floor(Self::DISPLAY_SECTIONS_WIDE);
+            let col_ident = section - section.div_floor(Self::DISPLAY_SECTIONS_TALL);
+
+            //dbg!(sec_ident);
+            let this_section_lr_bounds = ((row_ident * DISPLAY_SECTION_WIDTH), ((row_ident + 1) * DISPLAY_SECTION_WIDTH));
+            let this_section_ud_bounds = ((col_ident * DISPLAY_SECTION_HEIGHT), ((col_ident + 1) * DISPLAY_SECTION_HEIGHT));
+    
+            let mut lr: usize = this_section_lr_bounds.0;
+            let mut ud: usize = this_section_ud_bounds.0;
+        
+            
+            ud = this_section_ud_bounds.0;
+            while ud < this_section_ud_bounds.1 {
+                lr = this_section_lr_bounds.0;
+                while lr < this_section_ud_bounds.1 {
+                    dbg!(section);
+                    output[section].0[ud - this_section_ud_bounds.0].0[lr - this_section_ud_bounds.0] = self.0[ud].0[lr]; // Our Father, Who art in heaven, hallowed be Thy name; Thy kingdom come; Thy will be done on earth as it is in heaven. Give us this day our daily bread
+                    lr += 1;
+                }
+                ud += 1;
+            }
+            dbg!(section);
+            section += 1;
+        }
+        dbg!(section);
+        output
     }
 }
 
@@ -488,6 +565,8 @@ macro_rules! diff {
     }
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -569,4 +648,11 @@ pub fn main() {
     let mut q = parse_bmp!("src/image.bmp");
     q.parse_diff(diff!(Change{new: Color::from_hex(0xA0A0A0)}, (0, 0)));
     println!("{}", q);
+    let d = parse_bmp!("src/test-std.bmp");
+    println!("{}", d);
+    let x = d.split_to_sections();
+    for a in x {
+        println!("{}", a);
+    }
 }
+
