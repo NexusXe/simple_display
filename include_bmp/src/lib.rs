@@ -1,15 +1,7 @@
 extern crate proc_macro;
+use proc_macro::TokenStream;
 use rustbitmap::BitMap;
 use syn::{parse_macro_input, LitStr};
-use quote::quote;
-use proc_macro::TokenStream;
-
-#[proc_macro]
-pub fn build_include(tokens: TokenStream) -> TokenStream {
-    let path = parse_macro_input!(tokens as LitStr);
-    let expanded = quote! { include_bytes!(#path) };
-    expanded.into()
-}
 
 #[proc_macro]
 pub fn get_bmp(input: TokenStream) -> TokenStream {
@@ -20,7 +12,6 @@ pub fn get_bmp(input: TokenStream) -> TokenStream {
     let mut place_count: usize = 0;
     let mut row_count: usize = 0;
     pixel_vector.push(Vec::<u32>::new());
-
 
     for pixel in bmp.get_pixels() {
         let (r, g, b) = (pixel.get_red(), pixel.get_green(), pixel.get_blue());
@@ -35,9 +26,23 @@ pub fn get_bmp(input: TokenStream) -> TokenStream {
         place_count += 1;
     }
 
-    debug_assert_eq!(pixel_vector.len(), height, "pixel vector wrong size! expected {:} rows, got {:} rows\ncontents: {:?}", height, pixel_vector.len(), pixel_vector);
+    debug_assert_eq!(
+        pixel_vector.len(),
+        height,
+        "pixel vector wrong size! expected {:} rows, got {:} rows\ncontents: {:?}",
+        height,
+        pixel_vector.len(),
+        pixel_vector
+    );
     for row in &pixel_vector {
-        debug_assert_eq!(row.len(), width, "pixel vector wrong size! expected {:} columns, got {:} columns\ncontents: {:?}", width, row.len(), row);
+        debug_assert_eq!(
+            row.len(),
+            width,
+            "pixel vector wrong size! expected {:} columns, got {:} columns\ncontents: {:?}",
+            width,
+            row.len(),
+            row
+        );
     }
 
     pixel_vector.reverse(); // since bitmaps are flipped
@@ -59,7 +64,4 @@ pub fn get_bmp(input: TokenStream) -> TokenStream {
 
     let output_string: String = prefix.to_owned() + &row;
     output_string.parse().unwrap()
-
 }
-
-

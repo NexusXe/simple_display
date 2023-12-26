@@ -9,7 +9,7 @@
 #![feature(int_roundings)] // for section splitting math
 
 use core::fmt;
-use include_bmp::get_bmp;
+
 use std::mem;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -21,7 +21,11 @@ pub struct Color {
 
 impl Color {
     pub const fn new() -> Self {
-        Self { r: 0u8, g: 0u8, b: 0u8 }
+        Self {
+            r: 0u8,
+            g: 0u8,
+            b: 0u8,
+        }
     }
 
     pub const fn from_hex(hex: u32) -> Self {
@@ -266,7 +270,6 @@ impl<const W: usize> core::fmt::Debug for DisplayRow<W> {
     }
 }
 
-
 pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
 
 const DISPLAY_SECTION_WIDTH: usize = 16;
@@ -303,7 +306,6 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
     }
 
     pub const fn parse_diff(&mut self, diff: DisplayDiff) {
-
         match diff {
             DisplayDiff::Spot(spot) => self.get_pixel(spot.pos).diff(spot.kind),
             DisplayDiff::All(all) => {
@@ -332,51 +334,46 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         &mut self.0[n]
     }
 
-    
-    const DISPLAY_SECTIONS_WIDE: usize = W/DISPLAY_SECTION_WIDTH;
-    const DISPLAY_SECTIONS_TALL: usize = H/DISPLAY_SECTION_HEIGHT;
-    pub const DISPLAY_SECTIONS_WITHIN: usize = Self::DISPLAY_SECTIONS_WIDE*Self::DISPLAY_SECTIONS_TALL;
+    const DISPLAY_SECTIONS_WIDE: usize = W / DISPLAY_SECTION_WIDTH;
+    const DISPLAY_SECTIONS_TALL: usize = H / DISPLAY_SECTION_HEIGHT;
+    pub const DISPLAY_SECTIONS_WITHIN: usize =
+        Self::DISPLAY_SECTIONS_WIDE * Self::DISPLAY_SECTIONS_TALL;
 
     pub fn split_to_sections(self) -> [DisplaySection; Self::DISPLAY_SECTIONS_WITHIN] {
-        const ARRAY_REPEAT_VALUE: DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT> = DisplaySection::new(); // need to do this for... const reasons?
+        const ARRAY_REPEAT_VALUE: DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT> =
+            DisplaySection::new(); // need to do this for... const reasons?
         let mut output = [ARRAY_REPEAT_VALUE; Self::DISPLAY_SECTIONS_WITHIN];
         // traverse original image section by section
-        //let lr_bound: usize = Self::DISPLAY_SECTIONS_WIDE * DISPLAY_SECTION_WIDTH;
-        //let ud_bound: usize = Self::DISPLAY_SECTIONS_TALL * DISPLAY_SECTION_HEIGHT;
-        //assert!(lr_bound < self.0[0].0.len());
-        //assert!(ud_bound < self.0.len());
 
         let mut section: usize = 0;
-        //dbg!(Self::DISPLAY_SECTIONS_WITHIN);
-        //dbg!(Self::DISPLAY_SECTIONS_WIDE);
-        
 
         while section < Self::DISPLAY_SECTIONS_WITHIN {
-            let row_ident = section - section.div_floor(Self::DISPLAY_SECTIONS_WIDE);
-            let col_ident = section - section.div_floor(Self::DISPLAY_SECTIONS_TALL);
+            let row_ident = section.div_floor(Self::DISPLAY_SECTIONS_WIDE);
+            let col_ident = section - (row_ident * Self::DISPLAY_SECTIONS_WIDE);
 
-            //dbg!(sec_ident);
-            let this_section_lr_bounds = ((row_ident * DISPLAY_SECTION_WIDTH), ((row_ident + 1) * DISPLAY_SECTION_WIDTH));
-            let this_section_ud_bounds = ((col_ident * DISPLAY_SECTION_HEIGHT), ((col_ident + 1) * DISPLAY_SECTION_HEIGHT));
-    
+            let this_section_ud_bounds = (
+                (row_ident * DISPLAY_SECTION_WIDTH),
+                ((row_ident + 1) * DISPLAY_SECTION_WIDTH),
+            );
+            let this_section_lr_bounds = (
+                (col_ident * DISPLAY_SECTION_HEIGHT),
+                ((col_ident + 1) * DISPLAY_SECTION_HEIGHT),
+            );
+
             let mut lr: usize = this_section_lr_bounds.0;
             let mut ud: usize = this_section_ud_bounds.0;
-        
-            
-            ud = this_section_ud_bounds.0;
+
             while ud < this_section_ud_bounds.1 {
                 lr = this_section_lr_bounds.0;
-                while lr < this_section_ud_bounds.1 {
-                    dbg!(section);
-                    output[section].0[ud - this_section_ud_bounds.0].0[lr - this_section_ud_bounds.0] = self.0[ud].0[lr]; // Our Father, Who art in heaven, hallowed be Thy name; Thy kingdom come; Thy will be done on earth as it is in heaven. Give us this day our daily bread
+                while lr < this_section_lr_bounds.1 {
+                    output[section].0[ud - this_section_ud_bounds.0].0
+                        [lr - this_section_lr_bounds.0] = self.0[ud].0[lr]; // Our Father, Who art in heaven, hallowed be Thy name; Thy kingdom come; Thy will be done on earth as it is in heaven. Give us this day our daily bread
                     lr += 1;
                 }
                 ud += 1;
             }
-            dbg!(section);
             section += 1;
         }
-        dbg!(section);
         output
     }
 }
@@ -438,11 +435,16 @@ struct Change {
 
 impl const ToDisplayDiff for Change {
     fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff {
-        DisplayDiff::Spot(SpotDiff{kind: SDiff::Change(*self), pos})
+        DisplayDiff::Spot(SpotDiff {
+            kind: SDiff::Change(*self),
+            pos,
+        })
     }
 
     fn to_fqadiff(&self) -> DisplayDiff {
-        DisplayDiff::All(AllDiff{kind: ADiff::Change(*self)})
+        DisplayDiff::All(AllDiff {
+            kind: ADiff::Change(*self),
+        })
     }
 }
 
@@ -454,11 +456,16 @@ struct Shift {
 
 impl const ToDisplayDiff for Shift {
     fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff {
-        DisplayDiff::Spot(SpotDiff{kind: SDiff::Shift(*self), pos})
+        DisplayDiff::Spot(SpotDiff {
+            kind: SDiff::Shift(*self),
+            pos,
+        })
     }
 
     fn to_fqadiff(&self) -> DisplayDiff {
-        DisplayDiff::All(AllDiff{kind: ADiff::Shift(*self)})
+        DisplayDiff::All(AllDiff {
+            kind: ADiff::Shift(*self),
+        })
     }
 }
 
@@ -555,61 +562,13 @@ impl fmt::Debug for DisplayDiff {
     }
 }
 
-
-macro_rules! diff { 
+macro_rules! diff {
     ($kind:expr) => {
         $kind.to_fqadiff()
     };
     ($kind:expr, $pos:expr) => {
         $kind.to_fqsdiff($pos)
-    }
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    const TEST_HEX: u32 = 0x1eb3ab;
-    const TEST_COLOR: Color = Color::from_hex(TEST_HEX);
-    //const TEST_PIXEL: Pixel = Pixel::from_hex(TEST_HEX);
-    const BLACK_HEX: u32 = 0u32;
-    const BLACK_COLOR: Color = Color::from_hex(BLACK_HEX);
-    //const BLACK_PIXEL: Pixel = Pixel(BLACK_COLOR);
-
-    #[test]
-    fn color_hex_conv() {
-        assert_eq!(TEST_COLOR.as_hex(), TEST_HEX);
-        assert_eq!(BLACK_COLOR.as_hex(), BLACK_HEX);
-        assert_eq!((TEST_COLOR.r, TEST_COLOR.g, TEST_COLOR.b), (30, 179, 171));
-    }
-
-    #[test]
-    fn color_clamping() {
-        let mut terminal_pixels: DisplayRow<256> = DisplayRow([Pixel::new(); 256]);
-        for i in 0..TERMINAL_COLORS.len() {
-            terminal_pixels.0[i] = Pixel::from_hex(TERMINAL_COLORS[i])
-        }
-        let mut terminal_pixels_clamped: DisplayRow<256> = terminal_pixels;
-        for i in 0..terminal_pixels_clamped.0.len() {
-            terminal_pixels_clamped.0[i].0.clamp();
-        }
-        assert_eq!(terminal_pixels, terminal_pixels_clamped);
-    }
-
-    #[test]
-    fn diff_macro() {
-        let sdiff1: DisplayDiff = DisplayDiff::Spot(SpotDiff{kind: SDiff::Change(Change{new: Color::new()}), pos: (0, 0)});
-        let sdiff2: DisplayDiff = diff!(Change{new: Color::new()}, (0, 0));
-        let sdiff3: DisplayDiff = diff!(Change{new: Color::new()}, (0, 1));
-        let adiff1: DisplayDiff = DisplayDiff::All(AllDiff{kind: ADiff::Change(Change{new: Color::new()})});
-        let adiff2: DisplayDiff = diff!(Change{new: Color::new()});
-        let adiff3: DisplayDiff = diff!(Change{new: Color::from_hex(0xFFu32)});
-        assert_eq!(sdiff1, sdiff2);
-        assert_ne!(sdiff1, sdiff3);
-        assert_eq!(adiff1, adiff2);
-        assert_ne!(adiff1, adiff3);
-    }
+    };
 }
 
 const TERMINAL_COLORS: [u32; 256] = [
@@ -644,9 +603,68 @@ const TERMINAL_COLORS: [u32; 256] = [
     0xd0d0d0, 0xdadada, 0xe4e4e4, 0xeeeeee,
 ];
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const TEST_HEX: u32 = 0x1eb3ab;
+    const TEST_COLOR: Color = Color::from_hex(TEST_HEX);
+    //const TEST_PIXEL: Pixel = Pixel::from_hex(TEST_HEX);
+    const BLACK_HEX: u32 = 0u32;
+    const BLACK_COLOR: Color = Color::from_hex(BLACK_HEX);
+    //const BLACK_PIXEL: Pixel = Pixel(BLACK_COLOR);
+
+    #[test]
+    fn color_hex_conv() {
+        assert_eq!(TEST_COLOR.as_hex(), TEST_HEX);
+        assert_eq!(BLACK_COLOR.as_hex(), BLACK_HEX);
+        assert_eq!((TEST_COLOR.r, TEST_COLOR.g, TEST_COLOR.b), (30, 179, 171));
+    }
+
+    #[test]
+    fn color_clamping() {
+        let mut terminal_pixels: DisplayRow<256> = DisplayRow([Pixel::new(); 256]);
+        for i in 0..TERMINAL_COLORS.len() {
+            terminal_pixels.0[i] = Pixel::from_hex(TERMINAL_COLORS[i])
+        }
+        let mut terminal_pixels_clamped: DisplayRow<256> = terminal_pixels;
+        for i in 0..terminal_pixels_clamped.0.len() {
+            terminal_pixels_clamped.0[i].0.clamp();
+        }
+        assert_eq!(terminal_pixels, terminal_pixels_clamped);
+    }
+
+    #[test]
+    fn diff_macro() {
+        let sdiff1: DisplayDiff = DisplayDiff::Spot(SpotDiff {
+            kind: SDiff::Change(Change { new: Color::new() }),
+            pos: (0, 0),
+        });
+        let sdiff2: DisplayDiff = diff!(Change { new: Color::new() }, (0, 0));
+        let sdiff3: DisplayDiff = diff!(Change { new: Color::new() }, (0, 1));
+        let adiff1: DisplayDiff = DisplayDiff::All(AllDiff {
+            kind: ADiff::Change(Change { new: Color::new() }),
+        });
+        let adiff2: DisplayDiff = diff!(Change { new: Color::new() });
+        let adiff3: DisplayDiff = diff!(Change {
+            new: Color::from_hex(0xFFu32)
+        });
+        assert_eq!(sdiff1, sdiff2);
+        assert_ne!(sdiff1, sdiff3);
+        assert_eq!(adiff1, adiff2);
+        assert_ne!(adiff1, adiff3);
+    }
+}
+
+use include_bmp::get_bmp;
+
 pub fn main() {
     let mut q = parse_bmp!("src/image.bmp");
-    q.parse_diff(diff!(Change{new: Color::from_hex(0xA0A0A0)}, (0, 0)));
+    q.parse_diff(diff!(
+        Change {
+            new: Color::from_hex(0xA0A0A0)
+        },
+        (0, 0)
+    ));
     println!("{}", q);
     let d = parse_bmp!("src/test-std.bmp");
     println!("{}", d);
@@ -655,4 +673,3 @@ pub fn main() {
         println!("{}", a);
     }
 }
-
