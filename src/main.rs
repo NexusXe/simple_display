@@ -339,7 +339,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
     pub const DISPLAY_SECTIONS_WITHIN: usize =
         Self::DISPLAY_SECTIONS_WIDE * Self::DISPLAY_SECTIONS_TALL;
 
-    pub fn split_to_sections(self) -> [DisplaySection; Self::DISPLAY_SECTIONS_WITHIN] {
+    pub const fn split_to_sections(self) -> [DisplaySection; Self::DISPLAY_SECTIONS_WITHIN] {
         const ARRAY_REPEAT_VALUE: DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT> =
             DisplaySection::new(); // need to do this for... const reasons?
         let mut output = [ARRAY_REPEAT_VALUE; Self::DISPLAY_SECTIONS_WITHIN];
@@ -390,6 +390,7 @@ impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct ExpressionSet<const N: usize>([DisplaySection; N]);
 
 impl <const N: usize> ExpressionSet<N> {
@@ -401,9 +402,79 @@ impl <const N: usize> ExpressionSet<N> {
     pub const fn from_sections(sections: [DisplaySection; N]) -> Self {
         ExpressionSet(sections)
     }
+    pub const fn section(&self, num: usize) -> &DisplaySection {
+        &self.0[num]
+    }
+    pub const fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
-pub type EpsilonExpression = ExpressionSet<8>;
+pub struct ExpressionDiffRef<const N: usize> {
+    reference: &'static ExpressionSet<N>,
+    diff: DisplayDiff,
+    section: Option<usize>,
+}
+
+pub enum Expression<const N: usize> {
+    Defined(&'static ExpressionSet<N>),
+    DiffRef(ExpressionDiffRef<N>)
+}
+
+impl<const N: usize> Expression<N> {
+    pub const fn from_defined(defined: &'static ExpressionSet<N>) -> Self {
+        Self::Defined(defined)
+    }
+    pub const fn from_diff(reference: &'static ExpressionSet<N>, diff: DisplayDiff, section: Option<usize>) -> Self {
+        Self::DiffRef(ExpressionDiffRef{reference, diff, section})
+    }
+
+    pub const fn eval<'a>(&'a self) -> ExpressionSet<N> {
+        match self {
+            Expression::Defined(reference) => **reference,
+            Expression::DiffRef(diffref) => {
+                if diffref.section.is_some() {
+                    let mut x = *diffref.reference.section(diffref.section.unwrap());
+                    x.parse_diff(diffref.diff);
+                    let mut y = 0;
+                    let mut output = ExpressionSet::<N>::new();
+
+                    while y < output.len() {
+                        output.0[y] = {
+                            if y == diffref.section.unwrap() {
+                                x
+                            } else {
+                                *diffref.reference.section(y)
+                            }
+                        };
+                        y += 1;
+                    }
+                    output
+                } else {
+                    let mut output = *diffref.reference;
+                    let mut y: usize = 0;
+                    while y < output.len() {
+                        output.0[y].parse_diff(diffref.diff);
+                        y += 1;
+                    }
+                    output
+                }
+            },
+        }
+    }
+}
+
+macro_rules! use_expr {
+    ($path: literal) => {
+        {
+            const X: EpsilonExpressionSet = EpsilonExpressionSet::from_sections(parse_bmp!($path).split_to_sections());
+            EpsilonExpression::from_defined(&X)
+        }
+    };
+}
+const EPSILON_SECTIONS: usize = 8;
+pub type EpsilonExpressionSet = ExpressionSet<EPSILON_SECTIONS>;
+pub type EpsilonExpression = Expression<EPSILON_SECTIONS>;
 
 macro_rules! parse_bmp {
     ($path:literal) => {
@@ -425,7 +496,7 @@ macro_rules! parse_bmp {
                 DisplayImage(input)
             }
 
-            Box::new(get_bmp!($path))
+            get_bmp!($path)
             // TODO: move to built-in parsing (with a proc macro?) to not rely on python script
             // probably use std::IO (since proc macro can use host features) to build the struct
             // would still be an unhygenic expansion and increase compile time, but this is likely
@@ -686,10 +757,12 @@ pub fn main() {
     let mut x = d.split_to_sections();
     // let section_names = ["Eye", "Cheek", "EarSymbol", "Nose", "Mouth0", "Mouth1", "Mouth2", "Mouth3"];
     let blink_diff = diff!(Change{ new: Color::new()});
-    let return_state = x[0];
-    dbg!(mem::size_of_val(&blink_diff));
-    x[0].parse_diff(blink_diff);
-    println!("{}", x[0]);
-    x[0] = return_state;
-    println!("{}", x[0]);
+
+    const IDLE_EXPRESSION: EpsilonExpressionSet = EpsilonExpressionSet::from_sections(parse_bmp!("src/test-std.bmp").split_to_sections());
+    const IDLE: EpsilonExpression = use_expr!("src/test-std.bmp");
+    let eyes_shut: EpsilonExpression = EpsilonExpression::from_diff(&IDLE_EXPRESSION, blink_diff, Some(0));
+    for a in eyes_shut.eval().0 {
+        println!("{}", a);
+    }
+    // TODO: improve ergonomics
 }
