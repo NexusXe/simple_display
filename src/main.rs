@@ -1,7 +1,6 @@
 #![feature(const_mut_refs)] // for Color and Pixel impls
 #![feature(stmt_expr_attributes)] // for include lints
 #![feature(generic_arg_infer)] // for proc-macro-ish bmp parsing
-#![allow(dead_code, unused)]
 #![feature(const_option)] // for const pixel diffs
 #![feature(const_trait_impl)] // for const ToDisplayDiff impls
 #![feature(generic_const_exprs)] // for DisplaySection generic impls
@@ -241,11 +240,11 @@ impl<const W: usize> DisplayRow<W> {
         DisplayRow([Pixel::new(); W])
     }
 
-    const fn pixel(&self, n: usize) -> &Pixel {
+    pub const fn pixel(&self, n: usize) -> &Pixel {
         &self.0[n]
     }
 
-    const fn pixel_mut(&mut self, n: usize) -> &mut Pixel {
+    pub const fn pixel_mut(&mut self, n: usize) -> &mut Pixel {
         &mut self.0[n]
     }
 }
@@ -270,6 +269,7 @@ impl<const W: usize> core::fmt::Debug for DisplayRow<W> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
 
 const DISPLAY_SECTION_WIDTH: usize = 16;
@@ -326,11 +326,11 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         }
     }
 
-    const fn row(&self, n: usize) -> &DisplayRow<W> {
+    pub const fn row(&self, n: usize) -> &DisplayRow<W> {
         &self.0[n]
     }
 
-    const fn row_mut(&mut self, n: usize) -> &mut DisplayRow<W> {
+    pub const fn row_mut(&mut self, n: usize) -> &mut DisplayRow<W> {
         &mut self.0[n]
     }
 
@@ -360,7 +360,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
                 ((col_ident + 1) * DISPLAY_SECTION_HEIGHT),
             );
 
-            let mut lr: usize = this_section_lr_bounds.0;
+            let mut lr: usize;
             let mut ud: usize = this_section_ud_bounds.0;
 
             while ud < this_section_ud_bounds.1 {
@@ -389,6 +389,21 @@ impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
         Ok(())
     }
 }
+
+pub struct ExpressionSet<const N: usize>([DisplaySection; N]);
+
+impl <const N: usize> ExpressionSet<N> {
+    pub const ELEMENTS: usize = N;
+    pub const fn new() -> Self {
+        const TEMP: DisplaySection = DisplaySection::new();
+        ExpressionSet([TEMP; N])
+    }
+    pub const fn from_sections(sections: [DisplaySection; N]) -> Self {
+        ExpressionSet(sections)
+    }
+}
+
+pub type EpsilonExpression = ExpressionSet<8>;
 
 macro_rules! parse_bmp {
     ($path:literal) => {
@@ -511,7 +526,7 @@ impl DisplayDiff {
     pub const fn to_spot(&self, pos: PixelPos) -> Self {
         match self {
             Self::Spot(SpotDiff { kind: x, pos: _ }) => Self::Spot(SpotDiff { kind: *x, pos }),
-            Self::All((AllDiff { kind: x })) => Self::Spot(SpotDiff {
+            Self::All(AllDiff { kind: x }) => Self::Spot(SpotDiff {
                 kind: x.to_sdiff(),
                 pos,
             }),
@@ -668,8 +683,13 @@ pub fn main() {
     println!("{}", q);
     let d = parse_bmp!("src/test-std.bmp");
     println!("{}", d);
-    let x = d.split_to_sections();
-    for a in x {
-        println!("{}", a);
-    }
+    let mut x = d.split_to_sections();
+    // let section_names = ["Eye", "Cheek", "EarSymbol", "Nose", "Mouth0", "Mouth1", "Mouth2", "Mouth3"];
+    let blink_diff = diff!(Change{ new: Color::new()});
+    let return_state = x[0];
+    dbg!(mem::size_of_val(&blink_diff));
+    x[0].parse_diff(blink_diff);
+    println!("{}", x[0]);
+    x[0] = return_state;
+    println!("{}", x[0]);
 }
