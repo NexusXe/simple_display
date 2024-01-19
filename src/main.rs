@@ -391,7 +391,7 @@ impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
 #[derive(Clone, Copy)]
 pub struct ExpressionSet<const N: usize>([DisplaySection; N]);
 
-impl <const N: usize> ExpressionSet<N> {
+impl<const N: usize> ExpressionSet<N> {
     pub const ELEMENTS: usize = N;
     pub const fn new() -> Self {
         const TEMP: DisplaySection = DisplaySection::new();
@@ -416,15 +416,23 @@ pub struct ExpressionDiffRef<const N: usize> {
 
 pub enum Expression<const N: usize> {
     Defined(&'static ExpressionSet<N>),
-    DiffRef(ExpressionDiffRef<N>)
+    DiffRef(ExpressionDiffRef<N>),
 }
 
 impl<const N: usize> Expression<N> {
     pub const fn from_defined(defined: &'static ExpressionSet<N>) -> Self {
         Self::Defined(defined)
     }
-    pub const fn from_diff(reference: &'static ExpressionSet<N>, diff: DisplayDiff, section: Option<usize>) -> Self {
-        Self::DiffRef(ExpressionDiffRef{reference, diff, section})
+    pub const fn from_diff(
+        reference: &'static ExpressionSet<N>,
+        diff: DisplayDiff,
+        section: Option<usize>,
+    ) -> Self {
+        Self::DiffRef(ExpressionDiffRef {
+            reference,
+            diff,
+            section,
+        })
     }
 
     pub const fn eval<'a>(&'a self) -> ExpressionSet<N> {
@@ -457,18 +465,17 @@ impl<const N: usize> Expression<N> {
                     }
                     output
                 }
-            },
+            }
         }
     }
 }
 
 macro_rules! use_expr {
-    ($path: literal) => {
-        {
-            const X: EpsilonExpressionSet = EpsilonExpressionSet::from_sections(parse_bmp!($path).split_to_sections());
-            EpsilonExpression::from_defined(&X)
-        }
-    };
+    ($path: literal) => {{
+        const X: EpsilonExpressionSet =
+            EpsilonExpressionSet::from_sections(parse_bmp!($path).split_to_sections());
+        EpsilonExpression::from_defined(&X)
+    }};
 }
 const EPSILON_SECTIONS: usize = 8;
 pub type EpsilonExpressionSet = ExpressionSet<EPSILON_SECTIONS>;
@@ -754,11 +761,13 @@ pub fn main() {
     println!("{}", d);
     let mut _x = d.split_to_sections();
     // let section_names = ["Eye", "Cheek", "EarSymbol", "Nose", "Mouth0", "Mouth1", "Mouth2", "Mouth3"];
-    let blink_diff = diff!(Change{ new: Color::new()});
+    let blink_diff = diff!(Change { new: Color::new() });
 
-    const IDLE_EXPRESSION: EpsilonExpressionSet = EpsilonExpressionSet::from_sections(parse_bmp!("src/test-std.bmp").split_to_sections());
+    const IDLE_EXPRESSION: EpsilonExpressionSet =
+        EpsilonExpressionSet::from_sections(parse_bmp!("src/test-std.bmp").split_to_sections());
     const _IDLE: EpsilonExpression = use_expr!("src/test-std.bmp");
-    let eyes_shut: EpsilonExpression = EpsilonExpression::from_diff(&IDLE_EXPRESSION, blink_diff, Some(0));
+    let eyes_shut: EpsilonExpression =
+        EpsilonExpression::from_diff(&IDLE_EXPRESSION, blink_diff, Some(0));
     for a in eyes_shut.eval().0 {
         println!("{}", a);
     }
