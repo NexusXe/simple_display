@@ -46,8 +46,6 @@ pub fn get_bmp(input: TokenStream) -> TokenStream {
     }
 
     pixel_vector.reverse(); // since bitmaps are flipped
-
-    //let prefix = format!("const {}: [[u32; {:}]; {:}] = DisplayImage(", name, width, height);
     let prefix = "di(";
     let mut row: String = "[".to_string();
     for line in &pixel_vector {

@@ -107,6 +107,7 @@ impl core::fmt::Debug for Color {
     }
 }
 
+/// A wrapper around [Color], restricting the [Color] to only what can be displayed.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Pixel(Color);
 
@@ -230,6 +231,7 @@ impl core::fmt::Debug for Pixel {
     }
 }
 
+/// An array of [Pixel]s that form a single line (or row) of an image.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct DisplayRow<const W: usize>([Pixel; W]);
 
@@ -267,12 +269,14 @@ impl<const W: usize> core::fmt::Debug for DisplayRow<W> {
     }
 }
 
+/// A set of [DisplayRow]s, coming together to form a 2D image.
 #[derive(Clone, Copy)]
 pub struct DisplayImage<const W: usize, const H: usize>([DisplayRow<W>; H]);
 
 const DISPLAY_SECTION_WIDTH: usize = 16;
 const DISPLAY_SECTION_HEIGHT: usize = 16;
 
+/// A DisplayImage of width [DISPLAY_SECTION_WIDTH] and height [DISPLAY_SECTION_HEIGHT].
 type DisplaySection = DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT>;
 
 impl<const W: usize, const H: usize> DisplayImage<W, H> {
@@ -388,6 +392,7 @@ impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
     }
 }
 
+/// An array of [DisplaySection]s.
 #[derive(Clone, Copy)]
 pub struct ExpressionSet<const N: usize>([DisplaySection; N]);
 
@@ -408,6 +413,12 @@ impl<const N: usize> ExpressionSet<N> {
     }
 }
 
+/// An [Expression] variant that contains 3 parts:
+/// 1.) a static [ExpressionSet] that acts as the base of the expression,
+///
+/// 2.) a [DisplayDiff] that changes something about the underlying [Expression], and
+///
+/// 3.) (optionally) a section index to restrict the [DisplayDiff] to just that section.
 pub struct ExpressionDiffRef<const N: usize> {
     reference: &'static ExpressionSet<N>,
     diff: DisplayDiff,
@@ -434,19 +445,24 @@ impl<const N: usize> Expression<N> {
             section,
         })
     }
-
+    /// Evaluate self and return an [ExpressionSet] that contains
+    /// any applicable [DisplayDiff]s that it was created with.
     pub const fn eval<'a>(&'a self) -> ExpressionSet<N> {
         match self {
             Expression::Defined(reference) => **reference,
             Expression::DiffRef(diffref) => {
+                // if a section index is provided,
                 if diffref.section.is_some() {
+                    // get that corresponding section,
                     let mut x = *diffref.reference.section(diffref.section.unwrap());
+                    // apply the diff to it,
                     x.parse_diff(diffref.diff);
                     let mut y = 0;
                     let mut output = ExpressionSet::<N>::new();
 
                     while y < output.len() {
                         output.0[y] = {
+                            // the section we modified
                             if y == diffref.section.unwrap() {
                                 x
                             } else {
@@ -502,11 +518,6 @@ macro_rules! parse_bmp {
             }
 
             get_bmp!($path)
-            // TODO: move to built-in parsing (with a proc macro?) to not rely on python script
-            // probably use std::IO (since proc macro can use host features) to build the struct
-            // would still be an unhygenic expansion and increase compile time, but this is likely
-            // the most reasonable way to get it done (the only downside is at compile time afaict)
-            // could also just use include_bytes!()? will need to see how this can be done at compile time
         }
     }
 }
@@ -769,6 +780,9 @@ pub fn main() {
     let eyes_shut: EpsilonExpression =
         EpsilonExpression::from_diff(&IDLE_EXPRESSION, blink_diff, Some(0));
     for a in eyes_shut.eval().0 {
+        println!("{}", a);
+    }
+    for a in _IDLE.eval().0 {
         println!("{}", a);
     }
     // TODO: improve ergonomics
