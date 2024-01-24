@@ -75,11 +75,8 @@ impl Color {
         let dg = (deltas.g as u32).pow(2);
         let db = (deltas.b as u32).pow(2);
         let distance: u32 = dr + dg + db;
-        if distance > ((u8::MAX as u32).pow(2) * 3) {
-            panic!("got a value larger than should be possible");
-        } else {
-            distance
-        }
+        debug_assert!(!matches!(konst::const_cmp!(distance, (u8::MAX as u32).pow(2) * 3), core::cmp::Ordering::Greater), "got a value larger than should be possible");
+        distance
     }
 
     pub const fn closest_terminal_color(&self) -> u8 {
