@@ -184,9 +184,9 @@ impl From<u32> for Pixel {
     }
 }
 
-impl Into<u32> for Pixel {
-    fn into(self) -> u32 {
-        self.value_hex()
+impl From<Pixel> for u32 {
+    fn from(val: Pixel) -> Self {
+        val.value_hex()
     }
 }
 
@@ -386,7 +386,7 @@ impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
             for pixel in row.0 {
                 write!(f, "{}", pixel)?
             }
-            writeln!(f, "")?
+            writeln!(f)?
         }
         Ok(())
     }
@@ -410,6 +410,10 @@ impl<const N: usize> ExpressionSet<N> {
     }
     pub const fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
@@ -447,7 +451,7 @@ impl<const N: usize> Expression<N> {
     }
     /// Evaluate self and return an [ExpressionSet] that contains
     /// any applicable [DisplayDiff]s that it was created with.
-    pub const fn eval<'a>(&'a self) -> ExpressionSet<N> {
+    pub const fn eval(&self) -> ExpressionSet<N> {
         match self {
             Expression::Defined(reference) => **reference,
             Expression::DiffRef(diffref) => {
@@ -509,17 +513,20 @@ macro_rules! parse_bmp {
                 DisplayRow(input)
             }
 
-            const fn ph(input: u32) -> Pixel { // essentially a type alias
+            const fn ph(input: u32) -> Pixel {
+                // essentially a type alias
                 Pixel::from_hex(input)
             }
 
-            const fn di<const W: usize, const H: usize>(input: [DisplayRow<W>; H]) -> DisplayImage<W, H> {
+            const fn di<const W: usize, const H: usize>(
+                input: [DisplayRow<W>; H],
+            ) -> DisplayImage<W, H> {
                 DisplayImage(input)
             }
 
             get_bmp!($path)
         }
-    }
+    };
 }
 
 type DisplayAxisUnit = u32;
@@ -584,10 +591,10 @@ enum ADiff {
 }
 
 impl ADiff {
-    pub const fn to_sdiff(&self) -> SDiff {
+    pub const fn to_sdiff(self) -> SDiff {
         match self {
-            Self::Change(x) => SDiff::Change(*x),
-            Self::Shift(x) => SDiff::Shift(*x),
+            Self::Change(x) => SDiff::Change(x),
+            Self::Shift(x) => SDiff::Shift(x),
         }
     }
 }
@@ -705,58 +712,6 @@ const TERMINAL_COLORS: [u32; 256] = [
     0xd0d0d0, 0xdadada, 0xe4e4e4, 0xeeeeee,
 ];
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    const TEST_HEX: u32 = 0x1eb3ab;
-    const TEST_COLOR: Color = Color::from_hex(TEST_HEX);
-    //const TEST_PIXEL: Pixel = Pixel::from_hex(TEST_HEX);
-    const BLACK_HEX: u32 = 0u32;
-    const BLACK_COLOR: Color = Color::from_hex(BLACK_HEX);
-    //const BLACK_PIXEL: Pixel = Pixel(BLACK_COLOR);
-
-    #[test]
-    fn color_hex_conv() {
-        assert_eq!(TEST_COLOR.as_hex(), TEST_HEX);
-        assert_eq!(BLACK_COLOR.as_hex(), BLACK_HEX);
-        assert_eq!((TEST_COLOR.r, TEST_COLOR.g, TEST_COLOR.b), (30, 179, 171));
-    }
-
-    #[test]
-    fn color_clamping() {
-        let mut terminal_pixels: DisplayRow<256> = DisplayRow([Pixel::new(); 256]);
-        for i in 0..TERMINAL_COLORS.len() {
-            terminal_pixels.0[i] = Pixel::from_hex(TERMINAL_COLORS[i])
-        }
-        let mut terminal_pixels_clamped: DisplayRow<256> = terminal_pixels;
-        for i in 0..terminal_pixels_clamped.0.len() {
-            terminal_pixels_clamped.0[i].0.clamp();
-        }
-        assert_eq!(terminal_pixels, terminal_pixels_clamped);
-    }
-
-    #[test]
-    fn diff_macro() {
-        let sdiff1: DisplayDiff = DisplayDiff::Spot(SpotDiff {
-            kind: SDiff::Change(Change { new: Color::new() }),
-            pos: (0, 0),
-        });
-        let sdiff2: DisplayDiff = diff!(Change { new: Color::new() }, (0, 0));
-        let sdiff3: DisplayDiff = diff!(Change { new: Color::new() }, (0, 1));
-        let adiff1: DisplayDiff = DisplayDiff::All(AllDiff {
-            kind: ADiff::Change(Change { new: Color::new() }),
-        });
-        let adiff2: DisplayDiff = diff!(Change { new: Color::new() });
-        let adiff3: DisplayDiff = diff!(Change {
-            new: Color::from_hex(0xFFu32)
-        });
-        assert_eq!(sdiff1, sdiff2);
-        assert_ne!(sdiff1, sdiff3);
-        assert_eq!(adiff1, adiff2);
-        assert_ne!(adiff1, adiff3);
-    }
-}
-
 use include_bmp::get_bmp;
 
 pub fn main() {
@@ -786,4 +741,56 @@ pub fn main() {
         println!("{}", a);
     }
     // TODO: improve ergonomics
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const TEST_HEX: u32 = 0x1eb3ab;
+    const TEST_COLOR: Color = Color::from_hex(TEST_HEX);
+    //const TEST_PIXEL: Pixel = Pixel::from_hex(TEST_HEX);
+    const BLACK_HEX: u32 = 0u32;
+    const BLACK_COLOR: Color = Color::from_hex(BLACK_HEX);
+    //const BLACK_PIXEL: Pixel = Pixel(BLACK_COLOR);
+
+    #[test]
+    fn color_hex_conv() {
+        assert_eq!(TEST_COLOR.as_hex(), TEST_HEX);
+        assert_eq!(BLACK_COLOR.as_hex(), BLACK_HEX);
+        assert_eq!((TEST_COLOR.r, TEST_COLOR.g, TEST_COLOR.b), (30, 179, 171));
+    }
+
+    #[test]
+    fn color_clamping() {
+        let mut terminal_pixels: DisplayRow<256> = DisplayRow([Pixel::new(); 256]);
+        for (idx, color) in TERMINAL_COLORS.iter().enumerate() {
+            terminal_pixels.0[idx] = Pixel::from_hex(*color)
+        }
+        let mut terminal_pixels_clamped: DisplayRow<256> = terminal_pixels;
+        for i in 0..terminal_pixels_clamped.0.len() {
+            terminal_pixels_clamped.0[i].0.clamp();
+        }
+        assert_eq!(terminal_pixels, terminal_pixels_clamped);
+    }
+
+    #[test]
+    fn diff_macro() {
+        let sdiff1: DisplayDiff = DisplayDiff::Spot(SpotDiff {
+            kind: SDiff::Change(Change { new: Color::new() }),
+            pos: (0, 0),
+        });
+        let sdiff2: DisplayDiff = diff!(Change { new: Color::new() }, (0, 0));
+        let sdiff3: DisplayDiff = diff!(Change { new: Color::new() }, (0, 1));
+        let adiff1: DisplayDiff = DisplayDiff::All(AllDiff {
+            kind: ADiff::Change(Change { new: Color::new() }),
+        });
+        let adiff2: DisplayDiff = diff!(Change { new: Color::new() });
+        let adiff3: DisplayDiff = diff!(Change {
+            new: Color::from_hex(0xFFu32)
+        });
+        assert_eq!(sdiff1, sdiff2);
+        assert_ne!(sdiff1, sdiff3);
+        assert_eq!(adiff1, adiff2);
+        assert_ne!(adiff1, adiff3);
+    }
 }
