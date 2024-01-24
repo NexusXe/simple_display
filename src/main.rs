@@ -86,7 +86,7 @@ impl Color {
         let mut best: (u32, u8) = (u32::MAX, 0u8); // distance, color
                                                    // using [u32::MAX] here is an acceptable placeholder since any value above `257^2 * 3` *shouldn't* be possible
 
-        for_range!{ i in 0..TERMINAL_COLORS.len() =>
+        for_range! { i in 0..TERMINAL_COLORS.len() =>
             let c2: Color = Color::from_hex(TERMINAL_COLORS[i]);
             let diff: u32 = self.distance_to(&c2);
             if diff < best.0 {
@@ -318,7 +318,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         match diff {
             DisplayDiff::Spot(spot) => self.get_pixel(spot.pos).diff(spot.kind),
             DisplayDiff::All(all) => {
-                for_range!{a in 0..self.0.len() =>
+                for_range! {a in 0..self.0.len() =>
                     let row = &mut self.0[a];
                     for_range!{b in 0..row.0.len() =>
                         let pixel = &mut row.0[b];
@@ -348,7 +348,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         let mut output = [ARRAY_REPEAT_VALUE; Self::DISPLAY_SECTIONS_WITHIN];
         // traverse original image section by section
 
-        for_range!{ section in 0..Self::DISPLAY_SECTIONS_WITHIN =>
+        for_range! { section in 0..Self::DISPLAY_SECTIONS_WITHIN =>
             let row_ident = section.div_floor(Self::DISPLAY_SECTIONS_WIDE);
             let col_ident = section - (row_ident * Self::DISPLAY_SECTIONS_WIDE);
 
@@ -464,6 +464,7 @@ impl<const N: usize> Expression<N> {
     }
     /// Evaluate self and return an [ExpressionSet] that contains
     /// any applicable [DisplayDiff]s that it was created with.
+    #[must_use]
     pub const fn eval(&self) -> ExpressionSet<N> {
         match self {
             Expression::Defined(reference) => **reference,
@@ -476,7 +477,7 @@ impl<const N: usize> Expression<N> {
                     x.parse_diff(diffref.diff);
                     let mut output = ExpressionSet::<N>::new();
 
-                    for_range!{ y in 0..output.len() =>
+                    for_range! { y in 0..output.len() =>
                         output.0[y] = {
                             // the section we modified
                             if y == diffref.section.unwrap() {
@@ -489,7 +490,7 @@ impl<const N: usize> Expression<N> {
                     output
                 } else {
                     let mut output = *diffref.reference;
-                    for_range!{ y in 0..output.len() =>
+                    for_range! { y in 0..output.len() =>
                         output.0[y].parse_diff(diffref.diff);
                     }
                     output
