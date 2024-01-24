@@ -9,6 +9,7 @@ edition = "2021"
 
 [dependencies]
 include_bmp = { path = "include_bmp" }
+konst = { version = "0.3", features = ["nightly_mut_refs"] }
 
 [features]
 24bpp = []

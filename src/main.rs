@@ -8,6 +8,7 @@
 #![feature(int_roundings)] // for section splitting math
 
 use core::fmt;
+use konst::for_range;
 
 /// An RGB24 pixel, which may or may not be displayable.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -82,18 +83,16 @@ impl Color {
     }
 
     pub const fn closest_terminal_color(&self) -> u8 {
-        let mut i: usize = 0;
         let mut best: (u32, u8) = (u32::MAX, 0u8); // distance, color
                                                    // using [u32::MAX] here is an acceptable placeholder since any value above `257^2 * 3` *shouldn't* be possible
 
-        while i < TERMINAL_COLORS.len() {
+        for_range!{ i in 0..TERMINAL_COLORS.len() =>
             let c2: Color = Color::from_hex(TERMINAL_COLORS[i]);
             let diff: u32 = self.distance_to(&c2);
             if diff < best.0 {
                 best.0 = diff;
                 best.1 = i as u8;
             }
-            i += 1;
         }
         best.1
     }
@@ -319,18 +318,12 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         match diff {
             DisplayDiff::Spot(spot) => self.get_pixel(spot.pos).diff(spot.kind),
             DisplayDiff::All(all) => {
-                let mut a: usize = 0;
-                let mut b: usize = 0;
-
-                while a < self.0.len() {
+                for_range!{a in 0..self.0.len() =>
                     let row = &mut self.0[a];
-                    while b < row.0.len() {
+                    for_range!{b in 0..row.0.len() =>
                         let pixel = &mut row.0[b];
                         pixel.diff(all.kind.to_sdiff());
-                        b += 1;
                     }
-                    b = 0;
-                    a += 1;
                 }
             }
         }
@@ -355,9 +348,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         let mut output = [ARRAY_REPEAT_VALUE; Self::DISPLAY_SECTIONS_WITHIN];
         // traverse original image section by section
 
-        let mut section: usize = 0;
-
-        while section < Self::DISPLAY_SECTIONS_WITHIN {
+        for_range!{ section in 0..Self::DISPLAY_SECTIONS_WITHIN =>
             let row_ident = section.div_floor(Self::DISPLAY_SECTIONS_WIDE);
             let col_ident = section - (row_ident * Self::DISPLAY_SECTIONS_WIDE);
 
@@ -370,19 +361,12 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
                 ((col_ident + 1) * DISPLAY_SECTION_HEIGHT),
             );
 
-            let mut lr: usize;
-            let mut ud: usize = this_section_ud_bounds.0;
-
-            while ud < this_section_ud_bounds.1 {
-                lr = this_section_lr_bounds.0;
-                while lr < this_section_lr_bounds.1 {
+            for_range!{ ud in this_section_ud_bounds.0..this_section_ud_bounds.1 =>
+                for_range!{ lr in this_section_lr_bounds.0..this_section_lr_bounds.1 =>
                     output[section].0[ud - this_section_ud_bounds.0].0
                         [lr - this_section_lr_bounds.0] = self.0[ud].0[lr]; // Our Father, Who art in heaven, hallowed be Thy name; Thy kingdom come; Thy will be done on earth as it is in heaven. Give us this day our daily bread
-                    lr += 1;
                 }
-                ud += 1;
             }
-            section += 1;
         }
         output
     }
@@ -490,10 +474,9 @@ impl<const N: usize> Expression<N> {
                     let mut x = *diffref.reference.section(diffref.section.unwrap());
                     // apply the diff to it,
                     x.parse_diff(diffref.diff);
-                    let mut y = 0;
                     let mut output = ExpressionSet::<N>::new();
 
-                    while y < output.len() {
+                    for_range!{ y in 0..output.len() =>
                         output.0[y] = {
                             // the section we modified
                             if y == diffref.section.unwrap() {
@@ -502,15 +485,12 @@ impl<const N: usize> Expression<N> {
                                 *diffref.reference.section(y)
                             }
                         };
-                        y += 1;
                     }
                     output
                 } else {
                     let mut output = *diffref.reference;
-                    let mut y: usize = 0;
-                    while y < output.len() {
+                    for_range!{ y in 0..output.len() =>
                         output.0[y].parse_diff(diffref.diff);
-                        y += 1;
                     }
                     output
                 }
@@ -793,7 +773,7 @@ pub fn main() {
         println!("{}", a);
     }
     // TODO: improve ergonomics
-    const Q: DisplayImage<10, 10> = parse_bmp!("src/image.bmp");
+    // const Q: DisplayImage<10, 10> = parse_bmp!("src/image.bmp");
     println!("{}", IDLE_EXPRESSION);
     println!("{:#?}", IDLE_EXPRESSION);
 }
