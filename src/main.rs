@@ -9,6 +9,7 @@
 
 use core::fmt;
 
+/// An RGB24 pixel, which may or may not be displayable.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Color {
     r: u8,
@@ -17,6 +18,7 @@ pub struct Color {
 }
 
 impl Color {
+    /// Creates a new black [Pixel].
     pub const fn new() -> Self {
         Self {
             r: 0u8,
@@ -25,6 +27,7 @@ impl Color {
         }
     }
 
+    /// Constructs a new [Pixel] from a hexadecimal color value.
     pub const fn from_hex(hex: u32) -> Self {
         Self {
             r: (hex >> 16) as u8,
@@ -33,24 +36,29 @@ impl Color {
         }
     }
 
+    /// Returns the hexadecimal color value representation of self.
     pub const fn as_hex(&self) -> u32 {
         let output: u32 = (self.r as u32) << 16 | (self.g as u32) << 8 | self.b as u32;
         debug_assert!(output <= (2u32.pow(24) - 1));
         output
     }
 
+    /// Given a [Color], set self to match that color.
     pub const fn set(&mut self, c2: Color) {
         *self = c2;
     }
 
+    /// Given a hexadecimal color value, set self to match that color.
     pub const fn set_hex(&mut self, c2: u32) {
         *self = Self::from_hex(c2);
     }
 
+    /// Converts self into a [Pixel], **without checking for displayability**.
     pub const fn into_pixel(self) -> Pixel {
         Pixel(self)
     }
 
+    /// Finds the absolute value of the [euclidean distance](https://en.wikipedia.org/wiki/Euclidean_distance) of the red, green, and blue color channels to a second [Color], and wraps the result in a [Color].
     pub const fn channel_deltas(&self, c2: &Self) -> Color {
         // where r is delta r, etc.
         let r: u8 = c2.r.abs_diff(self.r);
@@ -59,6 +67,7 @@ impl Color {
         Color { r, g, b }
     }
 
+    /// Finds the square of the total absolute [euclidean distance](https://en.wikipedia.org/wiki/Euclidean_distance) between two [Color]s. Omits finding the square root of the value, as this is unneccesary use in the context of color clamping (done in [Self::closest_terminal_color()]).
     pub const fn distance_to(&self, c2: &Self) -> u32 {
         let deltas: Color = self.channel_deltas(c2);
         let dr = (deltas.r as u32).pow(2);
@@ -75,8 +84,7 @@ impl Color {
     pub const fn closest_terminal_color(&self) -> u8 {
         let mut i: usize = 0;
         let mut best: (u32, u8) = (u32::MAX, 0u8); // distance, color
-                                                   // using [u32::MAX] here is a good placeholder since any value
-                                                   // above `257^2 * 3` *shouldn't* be possible
+                                                   // using [u32::MAX] here is an acceptable placeholder since any value above `257^2 * 3` *shouldn't* be possible
 
         while i < TERMINAL_COLORS.len() {
             let c2: Color = Color::from_hex(TERMINAL_COLORS[i]);
@@ -392,6 +400,12 @@ impl<const W: usize, const H: usize> fmt::Display for DisplayImage<W, H> {
     }
 }
 
+impl<const W: usize, const H: usize> fmt::Debug for DisplayImage<W, H> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("DisplayImage").field(&self.0).finish()
+    }
+}
+
 /// An array of [DisplaySection]s.
 #[derive(Clone, Copy)]
 pub struct ExpressionSet<const N: usize>([DisplaySection; N]);
@@ -414,6 +428,21 @@ impl<const N: usize> ExpressionSet<N> {
 
     pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+impl<const N: usize> fmt::Display for ExpressionSet<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (idx, section) in self.0.iter().enumerate() {
+            writeln!(f, "field {:}:\n{}", idx, section)?
+        }
+        Ok(())
+    }
+}
+
+impl<const N: usize> fmt::Debug for ExpressionSet<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ExpressionSet").field(&self.0).finish()
     }
 }
 
@@ -532,11 +561,19 @@ macro_rules! parse_bmp {
 type DisplayAxisUnit = u32;
 type PixelPos = (DisplayAxisUnit, DisplayAxisUnit);
 
+/// Helper trait for types that can both:
+///
+/// be turned into a [DisplayDiff::Spot] when supplied with a [PixelPos], and
+///
+/// be turned into a [DisplayDiff::All].
 trait ToDisplayDiff {
+    /// Convert self and a supplied [PixelPos] into a [DisplayDiff::Spot].
     fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff;
+    /// Convert self into a [DisplayDiff::All].
     fn to_fqadiff(&self) -> DisplayDiff;
 }
 
+/// A base-level Diff struct that generically desribes a change in the color of some/all pixels in a [DisplayImage] by specififying the exact color that the target is to be set to.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Change {
     new: Color,
@@ -557,6 +594,8 @@ impl const ToDisplayDiff for Change {
     }
 }
 
+/// A base-level Diff struct that generically desribes a shift in the color of some/all pixels in a [DisplayImage] by specififying the color difference as a [Color], and additionally a [bool] that specifies whether
+/// the shift is to be done additively or subtractively.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Shift {
     color_diff: Color,
@@ -578,12 +617,18 @@ impl const ToDisplayDiff for Shift {
     }
 }
 
+/// A Diff that is to be done to just a single pixel (a Spot Diff).
+///
+/// Seperate from [ADiff] in the event that Diff types that aren't cross-compatible need to be introduced.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SDiff {
     Change(Change),
     Shift(Shift),
 }
 
+/// A Diff that is to be done to the entire array (an All Diff).
+///
+/// Seperate from [SDiff] in the event that Diff types that aren't cross-compatible need to be introduced.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ADiff {
     Change(Change),
@@ -591,6 +636,7 @@ enum ADiff {
 }
 
 impl ADiff {
+    /// Converts self into a [SDiff].
     pub const fn to_sdiff(self) -> SDiff {
         match self {
             Self::Change(x) => SDiff::Change(x),
@@ -599,17 +645,20 @@ impl ADiff {
     }
 }
 
+/// A fully formed Spot Diff, including a [PixelPos] describing its target.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct SpotDiff {
     kind: SDiff,
     pos: PixelPos,
 }
 
+/// A fully formed All Diff. Exists as a wrapper around [ADiff] to maintain parity with [SpotDiff].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct AllDiff {
     kind: ADiff,
 }
 
+/// A Diff that is fully formed and is ready to be applied to a [DisplayImage] via the target's [DisplayImage::parse_diff()] method.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DisplayDiff {
     Spot(SpotDiff),
@@ -617,6 +666,7 @@ pub enum DisplayDiff {
 }
 
 impl DisplayDiff {
+    /// Converts a [DisplayDiff::All] into a [DisplayDiff::Spot], given a [PixelPos] target position.
     pub const fn to_spot(&self, pos: PixelPos) -> Self {
         match self {
             Self::Spot(SpotDiff { kind: x, pos: _ }) => Self::Spot(SpotDiff { kind: *x, pos }),
@@ -626,6 +676,8 @@ impl DisplayDiff {
             }),
         }
     }
+
+    /// Returns the target of the diff contained within self as an [Option<&PixelPos>], where [None] means that the diff targets the entire array (and thus is a [DisplayDiff::All]).
     pub const fn target(&self) -> Option<&PixelPos> {
         match self {
             Self::Spot(SpotDiff { kind: _, pos }) => Some(pos),
@@ -741,6 +793,9 @@ pub fn main() {
         println!("{}", a);
     }
     // TODO: improve ergonomics
+    const Q: DisplayImage<10, 10> = parse_bmp!("src/image.bmp");
+    println!("{}", IDLE_EXPRESSION);
+    println!("{:#?}", IDLE_EXPRESSION);
 }
 
 #[cfg(test)]
