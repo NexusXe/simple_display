@@ -118,14 +118,28 @@ pub struct Pixel(Color);
 impl Pixel {
     const BLANK_PIXEL_HEX: u32 = 0u32;
 
+    /// Creates a new black [Pixel].
     pub const fn new() -> Self {
         Self(Color::from_hex(Self::BLANK_PIXEL_HEX))
     }
 
+    /// Change self's color value to that of a hexadecimal color.
     pub const fn set_hex(&mut self, new_color: u32) {
         *self = Color::from_hex(new_color).into_pixel();
     }
 
+    /// Clears self into that of a blank pixel.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// const P: Pixel = Pixel::new();
+    /// let mut t: Pixel = Pixel::new();
+    /// t.set_hex(0xabc123u32);
+    /// assert_ne!(P, t);
+    /// t.clear()
+    /// assert_eq!(P, t);
+    /// ```
     pub const fn clear(&mut self) {
         *self = Color::from_hex(Self::BLANK_PIXEL_HEX).into_pixel();
     }
