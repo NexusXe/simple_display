@@ -8,7 +8,7 @@ pub fn get_bmp(input: TokenStream) -> TokenStream {
     let path = parse_macro_input!(input as LitStr);
     let bmp = Box::new(BitMap::read(&path.value()).unwrap());
     let (width, height) = (bmp.get_width() as usize, bmp.get_height() as usize);
-    let mut pixel_vector: Vec<Vec<u32>> = Vec::<Vec<u32>>::with_capacity(height as usize);
+    let mut pixel_vector: Vec<Vec<u32>> = Vec::<Vec<u32>>::with_capacity(height);
     let mut place_count: usize = 0;
     let mut row_count: usize = 0;
     pixel_vector.push(Vec::<u32>::new());

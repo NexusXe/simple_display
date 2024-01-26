@@ -1,4 +1,5 @@
 cargo-features = ["profile-rustflags"]
+workspace = { members = ["libdisplay"] }
 
 [package]
 name = "simple_display"
@@ -8,8 +9,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-include_bmp = { path = "include_bmp" }
-konst = { version = "0.3", features = ["nightly_mut_refs"] }
+libdisplay = { path = "libdisplay" }
+
 
 [features]
 24bpp = []

@@ -15,15 +15,15 @@ rustbitmap = "0.1.0"
 syn = "2.0"
 quote = "1.0"
 
-[profile.dev]
-opt-level = 3
-debug = 1
-lto = true
-rustflags = ["-C", "target-cpu=native"]
+# [profile.dev]
+# opt-level = 3
+# debug = 1
+# lto = true
+# rustflags = ["-C", "target-cpu=native"]
 
-[profile.release]
-opt-level = 3
-debug = 0
-lto = "fat"
-rustflags = ["-C", "target-cpu=native"]
+# [profile.release]
+# opt-level = 3
+# debug = 0
+# lto = "fat"
+# rustflags = ["-C", "target-cpu=native"]
 
