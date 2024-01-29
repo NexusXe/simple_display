@@ -7,7 +7,6 @@
 #![allow(incomplete_features)] // for `generic_const_exprs` feature
 #![feature(int_roundings)] // for section splitting math
 
-
 use core::fmt;
 use konst::for_range;
 
@@ -76,7 +75,13 @@ impl Color {
         let dg = (deltas.g as u32).pow(2);
         let db = (deltas.b as u32).pow(2);
         let distance: u32 = dr + dg + db;
-        debug_assert!(!matches!(konst::const_cmp!(distance, (u8::MAX as u32).pow(2) * 3), core::cmp::Ordering::Greater), "got a value larger than should be possible");
+        debug_assert!(
+            !matches!(
+                konst::const_cmp!(distance, (u8::MAX as u32).pow(2) * 3),
+                core::cmp::Ordering::Greater
+            ),
+            "got a value larger than should be possible"
+        );
         distance
     }
 
@@ -130,9 +135,9 @@ impl Pixel {
     }
 
     /// Clears self into that of a blank pixel.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// const P: Pixel = Pixel::new();
     /// let mut t: Pixel = Pixel::new();
@@ -307,7 +312,7 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         Self([DisplayRow::<W>::new(); H])
     }
 
-    pub const fn new_from_image(input: [DisplayRow::<W>; H]) -> Self {
+    pub const fn new_from_image(input: [DisplayRow<W>; H]) -> Self {
         Self(input)
     }
 
@@ -361,7 +366,6 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
     const DISPLAY_SECTIONS_TALL: usize = H / DISPLAY_SECTION_HEIGHT;
     const DISPLAY_SECTIONS_WITHIN: usize =
         Self::DISPLAY_SECTIONS_WIDE * Self::DISPLAY_SECTIONS_TALL;
-
 
     pub const fn split_to_sections(self) -> [DisplaySection; Self::DISPLAY_SECTIONS_WITHIN] {
         const ARRAY_REPEAT_VALUE: DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT> =
@@ -451,13 +455,11 @@ impl<const N: usize> fmt::Debug for ExpressionSet<N> {
     }
 }
 
-
-
 #[macro_export]
 macro_rules! use_expr {
     ($path: literal) => {
         ExpressionSet::from_sections(parse_bmp!($path).split_to_sections())
-    }
+    };
 }
 
 /// An [Expression] variant that contains 3 parts:
@@ -544,31 +546,28 @@ impl<const N: usize> fmt::Debug for Expression<N> {
 
 #[macro_export]
 macro_rules! parse_bmp {
-    ($path:literal) => {
-        
-        {
-            type DI<const W: usize, const H: usize> = DisplayImage<W, H>;
-            type P = Pixel;
-            type C = Color;
-            type DR<const W: usize> = DisplayRow<W>;
-            const fn dr<const W: usize>(input: [Pixel; W]) -> DisplayRow<W> {
-                DisplayRow::new_from_row(input)
-            }
-
-            const fn ph(input: u32) -> Pixel {
-                // essentially a type alias
-                Pixel::from_hex(input)
-            }
-
-            const fn di<const W: usize, const H: usize>(
-                input: [DisplayRow<W>; H],
-            ) -> DisplayImage<W, H> {
-                DisplayImage::new_from_image(input)
-            }
-
-            get_bmp!($path)
+    ($path:literal) => {{
+        type DI<const W: usize, const H: usize> = DisplayImage<W, H>;
+        type P = Pixel;
+        type C = Color;
+        type DR<const W: usize> = DisplayRow<W>;
+        const fn dr<const W: usize>(input: [Pixel; W]) -> DisplayRow<W> {
+            DisplayRow::new_from_row(input)
         }
-    };
+
+        const fn ph(input: u32) -> Pixel {
+            // essentially a type alias
+            Pixel::from_hex(input)
+        }
+
+        const fn di<const W: usize, const H: usize>(
+            input: [DisplayRow<W>; H],
+        ) -> DisplayImage<W, H> {
+            DisplayImage::new_from_image(input)
+        }
+
+        get_bmp!($path)
+    }};
 }
 
 type DisplayAxisUnit = u32;
