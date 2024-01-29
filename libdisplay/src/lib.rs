@@ -359,8 +359,9 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
 
     const DISPLAY_SECTIONS_WIDE: usize = W / DISPLAY_SECTION_WIDTH;
     const DISPLAY_SECTIONS_TALL: usize = H / DISPLAY_SECTION_HEIGHT;
-    pub const DISPLAY_SECTIONS_WITHIN: usize =
+    const DISPLAY_SECTIONS_WITHIN: usize =
         Self::DISPLAY_SECTIONS_WIDE * Self::DISPLAY_SECTIONS_TALL;
+
 
     pub const fn split_to_sections(self) -> [DisplaySection; Self::DISPLAY_SECTIONS_WITHIN] {
         const ARRAY_REPEAT_VALUE: DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT> =
@@ -450,6 +451,15 @@ impl<const N: usize> fmt::Debug for ExpressionSet<N> {
     }
 }
 
+
+
+#[macro_export]
+macro_rules! use_expr {
+    ($path: literal) => {
+        ExpressionSet::from_sections(parse_bmp!($path).split_to_sections())
+    }
+}
+
 /// An [Expression] variant that contains 3 parts:
 /// 1.) a static [ExpressionSet] that acts as the base of the expression,
 ///
@@ -520,17 +530,17 @@ impl<const N: usize> Expression<N> {
     }
 }
 
-#[macro_export]
-macro_rules! use_expr {
-    ($path: literal) => {{
-        const X: EpsilonExpressionSet =
-            EpsilonExpressionSet::from_sections(parse_bmp!($path).split_to_sections());
-        EpsilonExpression::from_defined(&X)
-    }};
+impl<const N: usize> fmt::Display for Expression<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{}", self.eval())
+    }
 }
-const EPSILON_SECTIONS: usize = 8;
-pub type EpsilonExpressionSet = ExpressionSet<EPSILON_SECTIONS>;
-pub type EpsilonExpression = Expression<EPSILON_SECTIONS>;
+
+impl<const N: usize> fmt::Debug for Expression<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Expression").field(&self.eval()).finish()
+    }
+}
 
 #[macro_export]
 macro_rules! parse_bmp {
