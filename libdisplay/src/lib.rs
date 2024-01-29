@@ -139,11 +139,13 @@ impl Pixel {
     /// # Examples
     ///
     /// ```rust
+    /// use libdisplay::Pixel;
+    ///
     /// const P: Pixel = Pixel::new();
     /// let mut t: Pixel = Pixel::new();
     /// t.set_hex(0xabc123u32);
     /// assert_ne!(P, t);
-    /// t.clear()
+    /// t.clear();
     /// assert_eq!(P, t);
     /// ```
     pub const fn clear(&mut self) {
@@ -848,5 +850,15 @@ mod tests {
         assert_ne!(sdiff1, sdiff3);
         assert_eq!(adiff1, adiff2);
         assert_ne!(adiff1, adiff3);
+    }
+
+    #[test]
+    fn pixel_mutability() {
+        const P: Pixel = Pixel::new();
+        let mut t: Pixel = Pixel::new();
+        t.set_hex(0xabc123u32);
+        assert_ne!(P, t);
+        t.clear();
+        assert_eq!(P, t);
     }
 }
