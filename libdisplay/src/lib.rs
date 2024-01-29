@@ -455,6 +455,16 @@ impl<const N: usize> fmt::Debug for ExpressionSet<N> {
     }
 }
 
+impl<const N: usize> const IntoIterator for ExpressionSet<N> {
+    type Item = DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT>;
+
+    type IntoIter = std::array::IntoIter<Self::Item, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 #[macro_export]
 macro_rules! use_expr {
     ($path: literal) => {
@@ -529,6 +539,16 @@ impl<const N: usize> Expression<N> {
                 }
             }
         }
+    }
+}
+
+impl<const N: usize> const IntoIterator for Expression<N> {
+    type Item = DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT>;
+
+    type IntoIter = std::array::IntoIter<Self::Item, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.eval().into_iter()
     }
 }
 
