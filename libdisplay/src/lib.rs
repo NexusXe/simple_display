@@ -266,6 +266,10 @@ impl<const W: usize> DisplayRow<W> {
         DisplayRow([Pixel::new(); W])
     }
 
+    pub const fn len() -> usize {
+        W
+    }
+
     pub const fn new_from_row(input: [Pixel; W]) -> Self {
         Self(input)
     }
@@ -860,5 +864,67 @@ mod tests {
         assert_ne!(P, t);
         t.clear();
         assert_eq!(P, t);
+    }
+}
+
+pub trait DisplayMod {
+    fn apply_mod<const W: usize, const H: usize>(
+        self,
+        original: DisplayImage<W, H>,
+    ) -> DisplayImage<W, H>;
+}
+
+pub struct ShiftDiff {
+    shift: isize,
+    wrapping: bool,
+}
+
+pub trait Rotatable {
+    fn shl(self, count: usize) -> Self;
+    fn shr(self, count: usize) -> Self;
+    fn wrapping_rotate(self, count: isize) -> Self;
+}
+
+impl<const W: usize> Rotatable for DisplayRow<W> {
+    fn shl(self, count: usize) -> Self {
+        let mut out: Self = Self::new();
+        todo!();
+        out
+    }
+
+    fn shr(self, count: usize) -> Self {
+        let mut out: Self = Self::new();
+        todo!();
+        out
+    }
+
+    fn wrapping_rotate(self, count: isize) -> Self {
+        let mut out: Self = Self::new();
+        let dir: bool = count.is_positive();
+        let count: usize = count.unsigned_abs() % W;
+        for i in 0..Self::len() {
+            let index = if dir { i + count } else { i - count } % (Self::len()); // normalize i to array bounds
+            out.0[index] = self.0[i];
+        }
+
+        out
+    }
+}
+
+impl DisplayMod for ShiftDiff {
+    fn apply_mod<const W: usize, const H: usize>(
+        self,
+        original: DisplayImage<W, H>,
+    ) -> DisplayImage<W, H> {
+        let mut out = original;
+        for row in 0..original.0.len() {
+            if self.wrapping {
+                out.0[row] = original.0[row].wrapping_rotate(self.shift);
+            } else {
+                todo!()
+            }
+        }
+
+        out
     }
 }
