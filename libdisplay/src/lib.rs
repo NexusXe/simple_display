@@ -1,7 +1,6 @@
 #![feature(const_mut_refs)] // for Color and Pixel impls
 #![feature(stmt_expr_attributes)] // for include lints
 #![feature(generic_arg_infer)] // for proc-macro-ish bmp parsing
-#![feature(const_option)] // for const pixel diffs
 #![feature(const_trait_impl)] // for const ToDisplayDiff impls
 #![feature(generic_const_exprs)] // for DisplaySection generic impls
 #![allow(incomplete_features)] // for `generic_const_exprs` feature
@@ -171,27 +170,6 @@ impl Pixel {
     pub const fn set_color(&mut self, new: Color) {
         self.0 = new;
     }
-
-    const fn diff(&mut self, diff: SDiff) {
-        match diff {
-            SDiff::Change(x) => self.set_color(x.new),
-            SDiff::Shift(x) => {
-                let cshft = x.color_diff;
-                match x.direction {
-                    true => {
-                        self.0.r = u8::saturating_add(self.0.r, cshft.r);
-                        self.0.g = u8::saturating_add(self.0.g, cshft.g);
-                        self.0.b = u8::saturating_sub(self.0.b, cshft.b);
-                    }
-                    false => {
-                        self.0.r = u8::saturating_sub(self.0.r, cshft.r);
-                        self.0.g = u8::saturating_sub(self.0.g, cshft.g);
-                        self.0.b = u8::saturating_sub(self.0.b, cshft.b);
-                    }
-                }
-            }
-        }
-    }
 }
 
 impl From<[u8; 3]> for Pixel {
@@ -345,21 +323,6 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         x.set_color(new);
     }
 
-    pub const fn parse_diff(&mut self, diff: DisplayDiff) {
-        match diff {
-            DisplayDiff::Spot(spot) => self.get_pixel(spot.pos).diff(spot.kind),
-            DisplayDiff::All(all) => {
-                for_range! {a in 0..self.0.len() =>
-                    let row = &mut self.0[a];
-                    for_range!{b in 0..row.0.len() =>
-                        let pixel = &mut row.0[b];
-                        pixel.diff(all.kind.to_sdiff());
-                    }
-                }
-            }
-        }
-    }
-
     pub const fn row(&self, n: usize) -> &DisplayRow<W> {
         &self.0[n]
     }
@@ -372,6 +335,9 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
     const DISPLAY_SECTIONS_TALL: usize = H / DISPLAY_SECTION_HEIGHT;
     const DISPLAY_SECTIONS_WITHIN: usize =
         Self::DISPLAY_SECTIONS_WIDE * Self::DISPLAY_SECTIONS_TALL;
+
+    pub const ROWS: usize = H;
+    pub const COLUMNS: usize = W;
 
     pub const fn split_to_sections(self) -> [DisplaySection; Self::DISPLAY_SECTIONS_WITHIN] {
         const ARRAY_REPEAT_VALUE: DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT> =
@@ -478,98 +444,6 @@ macro_rules! use_expr {
     };
 }
 
-/// An [Expression] variant that contains 3 parts:
-/// 1.) a static [ExpressionSet] that acts as the base of the expression,
-///
-/// 2.) a [DisplayDiff] that changes something about the underlying [Expression], and
-///
-/// 3.) (optionally) a section index to restrict the [DisplayDiff] to just that section.
-pub struct ExpressionDiffRef<const N: usize> {
-    reference: &'static ExpressionSet<N>,
-    diff: DisplayDiff,
-    section: Option<usize>,
-}
-
-pub enum Expression<const N: usize> {
-    Defined(&'static ExpressionSet<N>),
-    DiffRef(ExpressionDiffRef<N>),
-}
-
-impl<const N: usize> Expression<N> {
-    pub const fn from_defined(defined: &'static ExpressionSet<N>) -> Self {
-        Self::Defined(defined)
-    }
-    pub const fn from_diff(
-        reference: &'static ExpressionSet<N>,
-        diff: DisplayDiff,
-        section: Option<usize>,
-    ) -> Self {
-        Self::DiffRef(ExpressionDiffRef {
-            reference,
-            diff,
-            section,
-        })
-    }
-    /// Evaluate self and return an [ExpressionSet] that contains
-    /// any applicable [DisplayDiff]s that it was created with.
-    #[must_use]
-    pub const fn eval(&self) -> ExpressionSet<N> {
-        match self {
-            Expression::Defined(reference) => **reference,
-            Expression::DiffRef(diffref) => {
-                // if a section index is provided,
-                if diffref.section.is_some() {
-                    // get that corresponding section,
-                    let mut x = *diffref.reference.section(diffref.section.unwrap());
-                    // apply the diff to it,
-                    x.parse_diff(diffref.diff);
-                    let mut output = ExpressionSet::<N>::new();
-
-                    for_range! { y in 0..output.len() =>
-                        output.0[y] = {
-                            // the section we modified
-                            if y == diffref.section.unwrap() {
-                                x
-                            } else {
-                                *diffref.reference.section(y)
-                            }
-                        };
-                    }
-                    output
-                } else {
-                    let mut output = *diffref.reference;
-                    for_range! { y in 0..output.len() =>
-                        output.0[y].parse_diff(diffref.diff);
-                    }
-                    output
-                }
-            }
-        }
-    }
-}
-
-impl<const N: usize> const IntoIterator for Expression<N> {
-    type Item = DisplayImage<DISPLAY_SECTION_WIDTH, DISPLAY_SECTION_HEIGHT>;
-
-    type IntoIter = std::array::IntoIter<Self::Item, N>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.eval().into_iter()
-    }
-}
-
-impl<const N: usize> fmt::Display for Expression<N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}", self.eval())
-    }
-}
-
-impl<const N: usize> fmt::Debug for Expression<N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Expression").field(&self.eval()).finish()
-    }
-}
-
 #[macro_export]
 macro_rules! parse_bmp {
     ($path:literal) => {{
@@ -598,178 +472,6 @@ macro_rules! parse_bmp {
 
 type DisplayAxisUnit = u32;
 type PixelPos = (DisplayAxisUnit, DisplayAxisUnit);
-
-/// Helper trait for types that can both:
-///
-/// be turned into a [DisplayDiff::Spot] when supplied with a [PixelPos], and
-///
-/// be turned into a [DisplayDiff::All].
-trait ToDisplayDiff {
-    /// Convert self and a supplied [PixelPos] into a [DisplayDiff::Spot].
-    fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff;
-    /// Convert self into a [DisplayDiff::All].
-    fn to_fqadiff(&self) -> DisplayDiff;
-}
-
-/// A base-level Diff struct that generically desribes a change in the color of some/all pixels in a [DisplayImage] by specififying the exact color that the target is to be set to.
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Change {
-    new: Color,
-}
-
-impl const ToDisplayDiff for Change {
-    fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff {
-        DisplayDiff::Spot(SpotDiff {
-            kind: SDiff::Change(*self),
-            pos,
-        })
-    }
-
-    fn to_fqadiff(&self) -> DisplayDiff {
-        DisplayDiff::All(AllDiff {
-            kind: ADiff::Change(*self),
-        })
-    }
-}
-
-/// A base-level Diff struct that generically desribes a shift in the color of some/all pixels in a [DisplayImage] by specififying the color difference as a [Color], and additionally a [bool] that specifies whether
-/// the shift is to be done additively or subtractively.
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Shift {
-    color_diff: Color,
-    direction: bool,
-}
-
-impl const ToDisplayDiff for Shift {
-    fn to_fqsdiff(&self, pos: PixelPos) -> DisplayDiff {
-        DisplayDiff::Spot(SpotDiff {
-            kind: SDiff::Shift(*self),
-            pos,
-        })
-    }
-
-    fn to_fqadiff(&self) -> DisplayDiff {
-        DisplayDiff::All(AllDiff {
-            kind: ADiff::Shift(*self),
-        })
-    }
-}
-
-/// A Diff that is to be done to just a single pixel (a Spot Diff).
-///
-/// Seperate from [ADiff] in the event that Diff types that aren't cross-compatible need to be introduced.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SDiff {
-    Change(Change),
-    Shift(Shift),
-}
-
-/// A Diff that is to be done to the entire array (an All Diff).
-///
-/// Seperate from [SDiff] in the event that Diff types that aren't cross-compatible need to be introduced.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ADiff {
-    Change(Change),
-    Shift(Shift),
-}
-
-impl ADiff {
-    /// Converts self into a [SDiff].
-    pub const fn to_sdiff(self) -> SDiff {
-        match self {
-            Self::Change(x) => SDiff::Change(x),
-            Self::Shift(x) => SDiff::Shift(x),
-        }
-    }
-}
-
-/// A fully formed Spot Diff, including a [PixelPos] describing its target.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct SpotDiff {
-    kind: SDiff,
-    pos: PixelPos,
-}
-
-/// A fully formed All Diff. Exists as a wrapper around [ADiff] to maintain parity with [SpotDiff].
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct AllDiff {
-    kind: ADiff,
-}
-
-/// A Diff that is fully formed and is ready to be applied to a [DisplayImage] via the target's [DisplayImage::parse_diff()] method.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum DisplayDiff {
-    Spot(SpotDiff),
-    All(AllDiff),
-}
-
-impl DisplayDiff {
-    /// Converts a [DisplayDiff::All] into a [DisplayDiff::Spot], given a [PixelPos] target position.
-    pub const fn to_spot(&self, pos: PixelPos) -> Self {
-        match self {
-            Self::Spot(SpotDiff { kind: x, pos: _ }) => Self::Spot(SpotDiff { kind: *x, pos }),
-            Self::All(AllDiff { kind: x }) => Self::Spot(SpotDiff {
-                kind: x.to_sdiff(),
-                pos,
-            }),
-        }
-    }
-
-    /// Returns the target of the diff contained within self as an [Option<&PixelPos>], where [None] means that the diff targets the entire array (and thus is a [DisplayDiff::All]).
-    pub const fn target(&self) -> Option<&PixelPos> {
-        match self {
-            Self::Spot(SpotDiff { kind: _, pos }) => Some(pos),
-            Self::All(_) => None,
-        }
-    }
-}
-
-impl fmt::Debug for DisplayDiff {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::All(x) => {
-                write!(f, "entire-display ")?;
-                match x.kind {
-                    ADiff::Change(c) => writeln!(f, "change to {:X}", c.new)?,
-                    ADiff::Shift(s) => {
-                        let dir: &str = match s.direction {
-                            true => "+",
-                            false => "-",
-                        };
-
-                        writeln!(f, "shift by {}{:X}", dir, s.color_diff)?
-                    }
-                }
-            }
-
-            Self::Spot(x) => {
-                write!(f, "pixel ({:}, {:}) ", x.pos.0, x.pos.1)?;
-                match x.kind {
-                    SDiff::Change(c) => writeln!(f, "change to {:X}", c.new)?,
-                    SDiff::Shift(s) => {
-                        let dir: &str = match s.direction {
-                            true => "+",
-                            false => "-",
-                        };
-
-                        writeln!(f, "shift by {}{:X}", dir, s.color_diff)?
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-#[macro_export]
-macro_rules! diff {
-    ($kind:expr) => {
-        $kind.to_fqadiff()
-    };
-    ($kind:expr, $pos:expr) => {
-        $kind.to_fqsdiff($pos)
-    };
-}
 
 const TERMINAL_COLORS: [u32; 256] = [
     0x000000, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080, 0xc0c0c0, 0x808080,
@@ -805,6 +507,87 @@ const TERMINAL_COLORS: [u32; 256] = [
 
 pub use include_bmp::get_bmp;
 
+pub trait DisplayMod {
+    fn apply_mod<const W: usize, const H: usize>(
+        self,
+        original: DisplayImage<W, H>,
+    ) -> DisplayImage<W, H>;
+}
+
+pub struct ShiftDiff {
+    shift: isize,
+    wrapping: bool,
+}
+
+pub trait Rotatable {
+    fn shl(self, count: usize) -> Self;
+    fn shr(self, count: usize) -> Self;
+    fn wrapping_rotate(self, count: isize) -> Self;
+}
+
+impl<const W: usize> Rotatable for DisplayRow<W> {
+    fn shl(self, count: usize) -> Self {
+        if count > W {
+            return Self::new();
+        }
+        let mut out: Self = Self::new();
+        let last_element_idx: usize = W.saturating_sub(count);
+        for i in 0..last_element_idx {
+            out.0[i] = if (i + count) < 8 {
+                self.0[i + count]
+            } else {
+                Pixel::new()
+            };
+        }
+        out
+    }
+
+    fn shr(self, count: usize) -> Self {
+        if count > W {
+            return Self::new();
+        }
+        let mut out: Self = Self::new();
+        for i in 0..W {
+            out.0[i] = if i < count {
+                Pixel::new()
+            } else {
+                self.0[i + count]
+            };
+        }
+        out
+    }
+
+    fn wrapping_rotate(self, count: isize) -> Self {
+        let mut out: Self = Self::new();
+        let dir: bool = count.is_positive();
+        let count: usize = count.unsigned_abs() % W;
+        for i in 0..Self::len() {
+            let index = if dir { i + count } else { i - count } % (Self::len()); // normalize i to array bounds
+            out.0[index] = self.0[i];
+        }
+
+        out
+    }
+}
+
+impl DisplayMod for ShiftDiff {
+    fn apply_mod<const W: usize, const H: usize>(
+        self,
+        original: DisplayImage<W, H>,
+    ) -> DisplayImage<W, H> {
+        let mut out = original;
+        for row in 0..H {
+            if self.wrapping {
+                out.0[row] = original.0[row].wrapping_rotate(self.shift);
+            } else {
+                todo!()
+            }
+        }
+
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -836,27 +619,6 @@ mod tests {
     }
 
     #[test]
-    fn diff_macro() {
-        let sdiff1: DisplayDiff = DisplayDiff::Spot(SpotDiff {
-            kind: SDiff::Change(Change { new: Color::new() }),
-            pos: (0, 0),
-        });
-        let sdiff2: DisplayDiff = diff!(Change { new: Color::new() }, (0, 0));
-        let sdiff3: DisplayDiff = diff!(Change { new: Color::new() }, (0, 1));
-        let adiff1: DisplayDiff = DisplayDiff::All(AllDiff {
-            kind: ADiff::Change(Change { new: Color::new() }),
-        });
-        let adiff2: DisplayDiff = diff!(Change { new: Color::new() });
-        let adiff3: DisplayDiff = diff!(Change {
-            new: Color::from_hex(0xFFu32)
-        });
-        assert_eq!(sdiff1, sdiff2);
-        assert_ne!(sdiff1, sdiff3);
-        assert_eq!(adiff1, adiff2);
-        assert_ne!(adiff1, adiff3);
-    }
-
-    #[test]
     fn pixel_mutability() {
         const P: Pixel = Pixel::new();
         let mut t: Pixel = Pixel::new();
@@ -864,67 +626,5 @@ mod tests {
         assert_ne!(P, t);
         t.clear();
         assert_eq!(P, t);
-    }
-}
-
-pub trait DisplayMod {
-    fn apply_mod<const W: usize, const H: usize>(
-        self,
-        original: DisplayImage<W, H>,
-    ) -> DisplayImage<W, H>;
-}
-
-pub struct ShiftDiff {
-    shift: isize,
-    wrapping: bool,
-}
-
-pub trait Rotatable {
-    fn shl(self, count: usize) -> Self;
-    fn shr(self, count: usize) -> Self;
-    fn wrapping_rotate(self, count: isize) -> Self;
-}
-
-impl<const W: usize> Rotatable for DisplayRow<W> {
-    fn shl(self, count: usize) -> Self {
-        let mut out: Self = Self::new();
-        todo!();
-        out
-    }
-
-    fn shr(self, count: usize) -> Self {
-        let mut out: Self = Self::new();
-        todo!();
-        out
-    }
-
-    fn wrapping_rotate(self, count: isize) -> Self {
-        let mut out: Self = Self::new();
-        let dir: bool = count.is_positive();
-        let count: usize = count.unsigned_abs() % W;
-        for i in 0..Self::len() {
-            let index = if dir { i + count } else { i - count } % (Self::len()); // normalize i to array bounds
-            out.0[index] = self.0[i];
-        }
-
-        out
-    }
-}
-
-impl DisplayMod for ShiftDiff {
-    fn apply_mod<const W: usize, const H: usize>(
-        self,
-        original: DisplayImage<W, H>,
-    ) -> DisplayImage<W, H> {
-        let mut out = original;
-        for row in 0..original.0.len() {
-            if self.wrapping {
-                out.0[row] = original.0[row].wrapping_rotate(self.shift);
-            } else {
-                todo!()
-            }
-        }
-
-        out
     }
 }
