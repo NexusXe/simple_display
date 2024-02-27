@@ -265,6 +265,7 @@ impl<const W: usize> fmt::Display for DisplayRow<W> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for i in &self.0 {
             // TODO: uhh... why twice?
+            // (i think it's to make them twice as tall?)
             write!(f, "{}", i)?;
             write!(f, "{}", i)?;
         }
@@ -305,8 +306,6 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         let x = x as usize;
         let y = y as usize;
 
-        //debug_assert!(x < W, "attempted out-of-array access! tried to get x idx {:} of array of len {:}", x, W);
-        //debug_assert!(y < H, "attempted out-of-array access! tried to get y idx {:} of array of len {:}", y, H);
         #[cfg(not(debug_assertions))]
         {
             if (x >= W) || (y >= H) {
@@ -315,7 +314,6 @@ impl<const W: usize, const H: usize> DisplayImage<W, H> {
         }
 
         &mut self.0[y].0[x]
-        //todo!()
     }
 
     pub const fn set_color(&mut self, pos: PixelPos, new: Color) {
@@ -507,6 +505,9 @@ const TERMINAL_COLORS: [u32; 256] = [
 
 pub use include_bmp::get_bmp;
 
+/// Generic trait for objects that can modify static expressions.
+/// By creating this trait, an arbitrary amount of diff types can
+/// be defined and used without requiring enum wrappers.
 pub trait DisplayMod {
     fn apply_mod<const W: usize, const H: usize>(
         self,
@@ -514,19 +515,31 @@ pub trait DisplayMod {
     ) -> DisplayImage<W, H>;
 }
 
+/// A Diff that simply shifts an image left or right (determined by the sign of the [Self::shift] field) and optionally
+/// rotates it instead of preforming a simple element-wise shift.
 pub struct ShiftDiff {
     shift: isize,
     wrapping: bool,
 }
 
+/// Generic trait for types that are Rotatable (and thus can also be shifted).
+/// In addition, this allows types to be shifted/rotated by arbitrary signed
+/// and/or unsigned types, which is not a feature of [std::ops::Shl] and [std::ops::Shr].
 pub trait Rotatable {
-    fn shl(self, count: usize) -> Self;
-    fn shr(self, count: usize) -> Self;
-    fn wrapping_rotate(self, count: isize) -> Self;
+    /// Unsigned right-hand side argument for [Rotatable::shl()] and [Rotatable::shr()].
+    type URhs;
+    /// Signed right-hand side argument for [Rotatable::rotate()].
+    type SRhs;
+    fn shl(self, rhs: Self::URhs) -> Self;
+    fn shr(self, rhs: Self::URhs) -> Self;
+    fn rotate(self, rhs: Self::SRhs) -> Self;
 }
 
 impl<const W: usize> Rotatable for DisplayRow<W> {
-    fn shl(self, count: usize) -> Self {
+    type URhs = usize;
+    type SRhs = isize;
+
+    fn shl(self, count: Self::URhs) -> Self {
         if count > W {
             return Self::new();
         }
@@ -542,7 +555,7 @@ impl<const W: usize> Rotatable for DisplayRow<W> {
         out
     }
 
-    fn shr(self, count: usize) -> Self {
+    fn shr(self, count: Self::URhs) -> Self {
         if count > W {
             return Self::new();
         }
@@ -557,7 +570,7 @@ impl<const W: usize> Rotatable for DisplayRow<W> {
         out
     }
 
-    fn wrapping_rotate(self, count: isize) -> Self {
+    fn rotate(self, count: Self::SRhs) -> Self {
         let mut out: Self = Self::new();
         let dir: bool = count.is_positive();
         let count: usize = count.unsigned_abs() % W;
@@ -578,13 +591,30 @@ impl DisplayMod for ShiftDiff {
         let mut out = original;
         for row in 0..H {
             if self.wrapping {
-                out.0[row] = original.0[row].wrapping_rotate(self.shift);
+                out.0[row] = original.0[row].rotate(self.shift);
+            } else if self.shift.is_negative() {
+                // left shift
+                out.0[row] = original.0[row].shl(self.shift.unsigned_abs());
             } else {
-                todo!()
+                out.0[row] = original.0[row].shr(self.shift.unsigned_abs());
             }
         }
 
         out
+    }
+}
+
+pub struct Expression<T: DisplayMod, const N: usize> {
+    image: &'static ExpressionSet<N>,
+    modification: Option<T>,
+}
+
+impl<T: DisplayMod, const N: usize> Expression<T, N> {
+    pub fn eval(self) -> ExpressionSet<N> {
+        if self.modification.is_none() {
+            return *self.image;
+        }
+        todo!()
     }
 }
 

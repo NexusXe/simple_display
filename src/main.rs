@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 use libdisplay::*;
 
 const EPSILON_SECTIONS: usize = 8;
