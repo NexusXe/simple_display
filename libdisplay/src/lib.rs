@@ -509,17 +509,19 @@ pub use include_bmp::get_bmp;
 /// By creating this trait, an arbitrary amount of diff types can
 /// be defined and used without requiring enum wrappers.
 pub trait DisplayMod {
+    /// Applies the effect defined by implementing type onto a DisplayImage. This intended to
+    /// be the last step before the [DisplayImage] is passed to the client display function.
     fn apply_mod<const W: usize, const H: usize>(
         self,
         original: DisplayImage<W, H>,
     ) -> DisplayImage<W, H>;
 }
 
-/// A Diff that simply shifts an image left or right (determined by the sign of the [Self::shift] field) and optionally
-/// rotates it instead of preforming a simple element-wise shift.
+/// A Diff that simply shifts an image left or right (determined by the sign of the [Self::shift] field)
+/// and optionally rotates it instead of preforming a simple element-wise shift.
 pub struct ShiftDiff {
-    shift: isize,
-    wrapping: bool,
+    pub shift: isize,
+    pub wrapping: bool,
 }
 
 /// Generic trait for types that are Rotatable (and thus can also be shifted).
@@ -596,6 +598,7 @@ impl DisplayMod for ShiftDiff {
                 // left shift
                 out.0[row] = original.0[row].shl(self.shift.unsigned_abs());
             } else {
+                // right shift
                 out.0[row] = original.0[row].shr(self.shift.unsigned_abs());
             }
         }
@@ -604,17 +607,20 @@ impl DisplayMod for ShiftDiff {
     }
 }
 
-pub struct Expression<T: DisplayMod, const N: usize> {
-    image: &'static ExpressionSet<N>,
-    modification: Option<T>,
+/// A fully-assembled unit that is configured for display. Contains a statically-defined [DisplayImage] and
+/// optionally some kind of object that implements [DisplayMod].
+pub struct Expression<T: DisplayMod, const W: usize, const H: usize> {
+    pub image: &'static DisplayImage<W, H>,
+    pub modification: Option<T>,
 }
 
-impl<T: DisplayMod, const N: usize> Expression<T, N> {
-    pub fn eval(self) -> ExpressionSet<N> {
-        if self.modification.is_none() {
-            return *self.image;
+impl<T: DisplayMod, const W: usize, const H: usize> Expression<T, W, H> {
+    /// Evaluates the [Expression], producing a rendered [DisplayImage].
+    pub fn eval(self) -> DisplayImage<W, H> {
+        match self.modification {
+            Some(x) => x.apply_mod(*self.image),
+            None => *self.image,
         }
-        todo!()
     }
 }
 
