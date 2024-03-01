@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use libdisplay::*;
+use display::*;
 
 const EPSILON_SECTIONS: usize = 8;
 // type EpsilonExpression = Expression<EPSILON_SECTIONS>;

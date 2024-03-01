@@ -138,7 +138,7 @@ impl Pixel {
     /// # Examples
     ///
     /// ```rust
-    /// use libdisplay::Pixel;
+    /// use display::Pixel;
     ///
     /// const P: Pixel = Pixel::new();
     /// let mut t: Pixel = Pixel::new();
